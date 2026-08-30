@@ -16,6 +16,7 @@ import dashboardRouter from "./modules/dashboard/dashboard.routes";
 import compatibilityRouter from "./modules/compatibility/compatibility.routes";
 import customerRouter from "./modules/customer/customer.routes";
 import configurationRouter from "./modules/configuration/configuration.routes";
+import epinsRouter from "./modules/epins/epins.routes";
 import path from "path";
 
 import { AppError } from "./utils/errors";
@@ -100,6 +101,9 @@ app.use("/api/v1/payments", paymentsRouter);
 app.use("/api/v1/documents", documentsRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/config", configurationRouter);
+app.use("/api/config", configurationRouter);
+app.use("/api/v1/epins", epinsRouter);
+app.use("/api/epins", epinsRouter);
 
 // apicall gateway (legacy PHP used /api/api.php — now /api)
 app.use("/api", compatibilityRouter);
