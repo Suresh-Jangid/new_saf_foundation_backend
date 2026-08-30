@@ -1,0 +1,1019 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                        String                            @id @default(uuid()) @db.Uuid
+  mobile                    String                            @db.VarChar(15)
+  passwordHash              String                            @map("password_hash") @db.VarChar(255)
+  name                      String                            @db.VarChar(100)
+  email                     String?                           @db.VarChar(100)
+  role                      Role                              @default(AGENT)
+  isActive                  Boolean                           @default(true) @map("is_active")
+  createdAt                 DateTime                          @default(now()) @map("created_at")
+  updatedAt                 DateTime                          @updatedAt @map("updated_at")
+  deletedAt                 DateTime?                         @map("deleted_at")
+  addedAgentPayouts         AgentPayment[]                    @relation("AdminAddedPayout")
+  agentPayouts              AgentPayment[]                    @relation("AgentPayout")
+  permissions               AgentPermission[]
+  agentProfile              AgentProfile?
+  auditLogs                 AuditLog[]
+  disabilityCycles          DisabilityCycle[]
+  financialHelpInstallments FinancialHelpInstallment[]
+  financialHelps            FinancialHelp[]
+  generalInstallments       GeneralApplicationInstallment[]
+  generalApplications       GeneralApplication[]              @relation("AddedByGeneral")
+  insuranceInstallments     InsuranceApplicationInstallment[]
+  insuranceApplications     InsuranceApplication[]            @relation("AddedByInsurance")
+  loanInstallments          LoanApplicationInstallment[]
+  loanApplications          LoanApplication[]                 @relation("AddedByLoan")
+  marriageCongrats          MarriageCongratulations[]
+  marriagePayments          MarriageCongratulationsPayment[]
+  marriageSewingMachines    MarriageSewingMachine[]
+  mayraCongrats             MayraCongratulations[]
+  mayraPayments             MayraCongratulationsPayment[]
+  mayraInstallments         MayraInstallment[]
+  mayraRegistrations        MayraRegistration[]
+  cashPayments              Payment[]
+  pensionYojana             PensionYojana[]
+  pensionPayments           PensionYojanaPayment[]
+  sewingMachineCamps        SewingMachineCamp[]
+
+  @@index([mobile])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model AgentProfile {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @unique @map("user_id") @db.Uuid
+  employeeId       String    @map("employee_id") @db.VarChar(50)
+  fatherName       String    @map("father_name") @db.VarChar(100)
+  gotra            String    @db.VarChar(50)
+  age              Int
+  gender           Gender
+  village          String    @db.VarChar(100)
+  address          String
+  tehsil           String    @db.VarChar(100)
+  district         String    @db.VarChar(100)
+  workArea         String    @map("work_area") @db.VarChar(255)
+  bankName         String    @map("bank_name") @db.VarChar(100)
+  accountNumber    String    @map("account_number") @db.VarChar(50)
+  ifscCode         String    @map("ifsc_code") @db.VarChar(20)
+  nomineeName      String    @map("nominee_name") @db.VarChar(100)
+  nomineeMobile    String    @map("nominee_mobile") @db.VarChar(15)
+  nomineeRelation  String    @map("nominee_relation") @db.VarChar(50)
+  aadhaar          String?   @db.VarChar(20)
+  designation      String?   @db.VarChar(100)
+  profileImageUrl  String?   @map("profile_image_url")
+  dateOfBirth      DateTime? @map("date_of_birth") @db.Date
+  dateOfJoining    DateTime? @map("date_of_joining") @db.Date
+  registrationDate DateTime? @map("registration_date") @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([gender])
+  @@index([village])
+  @@map("agent_profiles")
+}
+
+model AgentPermission {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  module    String   @db.VarChar(100)
+  canView   Boolean  @default(false) @map("can_view")
+  canCreate Boolean  @default(false) @map("can_create")
+  canUpdate Boolean  @default(false) @map("can_update")
+  canDelete Boolean  @default(false) @map("can_delete")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, module])
+  @@map("agent_permissions")
+}
+
+model GeneralApplication {
+  id               String                          @id @default(uuid()) @db.Uuid
+  srNo             Int                             @unique @default(autoincrement()) @map("sr_no")
+  formNumber       String                          @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime                        @map("application_date") @db.Date
+  applicantName    String                          @map("applicant_name") @db.VarChar(100)
+  fatherName       String                          @map("father_name") @db.VarChar(100)
+  motherName       String                          @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime                        @map("date_of_birth") @db.Date
+  aadharNumber     String                          @map("aadhar_number") @db.VarChar(12)
+  gotra            String                          @db.VarChar(50)
+  mobile           String                          @db.VarChar(15)
+  address          String
+  pinCode          String                          @map("pin_code") @db.VarChar(10)
+  tehsil           String                          @db.VarChar(100)
+  district         String                          @db.VarChar(100)
+  state            String                          @db.VarChar(100)
+  nomineeName      String?                         @map("nominee_name") @db.VarChar(100)
+  nomineeRelation  String?                         @map("nominee_relation") @db.VarChar(50)
+  affidavitUrl     String?                         @map("affidavit_url") @db.VarChar(512)
+  passportPhotoUrl String?                         @map("passport_photo_url") @db.VarChar(512)
+  gender           Gender
+  category         ApplicationCategory
+  totalAmount      Decimal                         @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount    Decimal                         @map("pending_amount") @db.Decimal(10, 2)
+  isActive         Boolean                         @default(true) @map("is_active")
+  addedById        String                          @map("added_by_id") @db.Uuid
+  createdAt        DateTime                        @default(now()) @map("created_at")
+  updatedAt        DateTime                        @updatedAt @map("updated_at")
+  deletedAt        DateTime?                       @map("deleted_at")
+  installments     GeneralApplicationInstallment[]
+  addedBy          User                            @relation("AddedByGeneral", fields: [addedById], references: [id])
+
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([formNumber])
+  @@index([gender])
+  @@index([category])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("general_applications")
+}
+
+model GeneralApplicationInstallment {
+  id            String             @id @default(uuid()) @db.Uuid
+  applicationId String             @map("application_id") @db.Uuid
+  amount        Decimal            @db.Decimal(10, 2)
+  date          DateTime           @db.Date
+  note          String?
+  paymentMode   PaymentMode        @default(CASH) @map("payment_mode")
+  addedById     String             @map("added_by_id") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  deletedAt     DateTime?          @map("deleted_at")
+  addedBy       User               @relation(fields: [addedById], references: [id])
+  application   GeneralApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, date])
+  @@index([addedById, date])
+  @@map("general_application_installments")
+}
+
+model InsuranceApplication {
+  id               String                            @id @default(uuid()) @db.Uuid
+  srNo             Int                               @unique @default(autoincrement()) @map("sr_no")
+  formNumber       String                            @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime                          @map("application_date") @db.Date
+  applicantName    String                            @map("applicant_name") @db.VarChar(100)
+  fatherName       String                            @map("father_name") @db.VarChar(100)
+  wifeName         String?                           @map("wife_name") @db.VarChar(100)
+  motherName       String                            @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime                          @map("date_of_birth") @db.Date
+  aadharNumber     String                            @map("aadhar_number") @db.VarChar(12)
+  gotra            String                            @db.VarChar(50)
+  mobile           String                            @db.VarChar(15)
+  address          String
+  pinCode          String                            @map("pin_code") @db.VarChar(10)
+  tehsil           String                            @db.VarChar(100)
+  district         String                            @db.VarChar(100)
+  state            String                            @db.VarChar(100)
+  nomineeName      String?                           @map("nominee_name") @db.VarChar(100)
+  nomineeRelation  String?                           @map("nominee_relation") @db.VarChar(50)
+  affidavitUrl     String?                           @map("affidavit_url") @db.VarChar(512)
+  passportPhotoUrl String?                           @map("passport_photo_url") @db.VarChar(512)
+  gender           Gender
+  category         ApplicationCategory
+  totalAmount      Decimal                           @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount    Decimal                           @map("pending_amount") @db.Decimal(10, 2)
+  isActive         Boolean                           @default(true) @map("is_active")
+  addedById        String                            @map("added_by_id") @db.Uuid
+  createdAt        DateTime                          @default(now()) @map("created_at")
+  updatedAt        DateTime                          @updatedAt @map("updated_at")
+  deletedAt        DateTime?                         @map("deleted_at")
+  installments     InsuranceApplicationInstallment[]
+  addedBy          User                              @relation("AddedByInsurance", fields: [addedById], references: [id])
+  surakshaBima     SurakshaBimaYojana?
+
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([formNumber])
+  @@index([gender])
+  @@index([category])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("insurance_applications")
+}
+
+model InsuranceApplicationInstallment {
+  id                     String               @id @default(uuid()) @db.Uuid
+  applicationInsuranceId String               @map("application_insurance_id") @db.Uuid
+  amount                 Decimal              @db.Decimal(10, 2)
+  date                   DateTime             @db.Date
+  note                   String?
+  rashidNumber           String?              @map("rashid_number") @db.VarChar(50)
+  paymentMode            PaymentMode          @default(CASH) @map("payment_mode")
+  addedById              String               @map("added_by_id") @db.Uuid
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  deletedAt              DateTime?            @map("deleted_at")
+  addedBy                User                 @relation(fields: [addedById], references: [id])
+  application            InsuranceApplication @relation(fields: [applicationInsuranceId], references: [id], onDelete: Cascade)
+
+  @@index([applicationInsuranceId, date])
+  @@index([addedById, date])
+  @@index([deletedAt])
+  @@map("insurance_application_installments")
+}
+
+model SurakshaBimaYojana {
+  id                     String               @id @default(uuid()) @db.Uuid
+  insuranceApplicationId String               @unique @map("insurance_application_id") @db.Uuid
+  date                   DateTime             @db.Date
+  codeNumber             String               @map("code_number") @db.VarChar(50)
+  bimaNumber             String               @map("bima_number") @db.VarChar(50)
+  applicantName          String               @map("applicant_name") @db.VarChar(100)
+  fatherName             String               @map("father_name") @db.VarChar(100)
+  wifeOf                 String?              @map("wife_of") @db.VarChar(100)
+  gotra                  String               @db.VarChar(50)
+  address                String
+  membershipJoinDate     DateTime             @map("membership_join_date") @db.Date
+  associatedUntil        String               @map("associated_until") @db.VarChar(255)
+  permanentFee           Decimal              @map("permanent_fee") @db.Decimal(10, 2)
+  installmentAmount      Decimal              @map("installment_amount") @db.Decimal(10, 2)
+  totalGrantAmount       Decimal              @map("total_grant_amount") @db.Decimal(10, 2)
+  totalMembersServing    Int                  @map("total_members_serving")
+  rate200                Decimal              @map("rate_200") @db.Decimal(10, 2)
+  deducted10Percent      Decimal              @map("deducted_10_percent") @db.Decimal(10, 2)
+  deducted25Percent      Decimal              @map("deducted_25_percent") @db.Decimal(10, 2)
+  totalPaidAmount        Decimal              @map("total_paid_amount") @db.Decimal(10, 2)
+  remark                 String?
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  deletedAt              DateTime?            @map("deleted_at")
+  insuranceApplication   InsuranceApplication @relation(fields: [insuranceApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([bimaNumber])
+  @@index([codeNumber])
+  @@index([date])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("suraksha_bima_yojana")
+}
+
+model MayraRegistration {
+  id                 String                @id @default(uuid()) @db.Uuid
+  srNo               Int                   @unique @default(autoincrement()) @map("sr_no")
+  formNumber         String                @map("form_number") @db.VarChar(50)
+  applicationDate    DateTime              @map("application_date") @db.Date
+  applicantName      String                @map("applicant_name") @db.VarChar(100)
+  fatherName         String                @map("father_name") @db.VarChar(100)
+  motherName         String                @map("mother_name") @db.VarChar(100)
+  dateOfBirth        DateTime              @map("date_of_birth") @db.Date
+  age                Int
+  slabCode           String?               @map("slab_code") @db.VarChar(50)
+  slabName           String?               @map("slab_name") @db.VarChar(100)
+  resolvedMinAge     Int?                  @map("resolved_min_age")
+  resolvedMaxAge     Int?                  @map("resolved_max_age")
+  joiningFee         Decimal               @default(0) @map("joining_fee") @db.Decimal(10, 2)
+  mayraInstallment   Decimal               @default(0) @map("mayra_installment") @db.Decimal(10, 2)
+  gotra              String                @db.VarChar(50)
+  address            String
+  aadharNumber       String                @map("aadhar_number") @db.VarChar(12)
+  mobile             String                @db.VarChar(15)
+  nomineeName        String                @map("nominee_name") @db.VarChar(100)
+  nomineeFatherName  String?               @map("nominee_father_name") @db.VarChar(100)
+  nomineeHusbandName String?               @map("nominee_husband_name") @db.VarChar(100)
+  nomineeGotra       String?               @map("nominee_gotra") @db.VarChar(50)
+  nomineeAddress     String?               @map("nominee_address")
+  tehsil             String                @db.VarChar(100)
+  district           String                @db.VarChar(100)
+  pinCode            String                @map("pin_code") @db.VarChar(10)
+  nomineeRelation    String                @map("nominee_relation") @db.VarChar(50)
+  workerName         String                @map("worker_name") @db.VarChar(100)
+  workerMobile       String?               @map("worker_mobile") @db.VarChar(15)
+  passportPhotoUrl   String?               @map("passport_photo_url") @db.VarChar(512)
+  nomineePhotoUrl    String?               @map("nominee_photo_url") @db.VarChar(512)
+  isActive           Boolean               @default(true) @map("is_active")
+  gender             Gender
+  addedById          String                @map("added_by_id") @db.Uuid
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  deletedAt          DateTime?             @map("deleted_at")
+  mayraCongrats      MayraCongratulations?
+  installments       MayraInstallment[]
+  addedBy            User                  @relation(fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([gender])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("mayra_registrations")
+}
+
+model MayraInstallment {
+  id                  String            @id @default(uuid()) @db.Uuid
+  mayraRegistrationId String            @map("mayra_registration_id") @db.Uuid
+  amount              Decimal           @db.Decimal(10, 2)
+  date                DateTime          @db.Date
+  note                String?
+  rashidNumber        String?           @map("rashid_number") @db.VarChar(50)
+  paymentMode         PaymentMode       @default(CASH) @map("payment_mode")
+  addedById           String            @map("added_by_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  deletedAt           DateTime?         @map("deleted_at")
+  addedBy             User              @relation(fields: [addedById], references: [id])
+  mayraRegistration   MayraRegistration @relation(fields: [mayraRegistrationId], references: [id], onDelete: Cascade)
+
+  @@index([mayraRegistrationId, date])
+  @@index([addedById, date])
+  @@map("mayra_installments")
+}
+
+model MayraCongratulations {
+  id                  String                        @id @default(uuid()) @db.Uuid
+  mayraRegistrationId String                        @unique @map("mayra_registration_id") @db.Uuid
+  date                DateTime                      @db.Date
+  codeNumber          String                        @map("code_number") @db.VarChar(50)
+  mayraNumber         String                        @map("mayra_number") @db.VarChar(50)
+  applicantName       String                        @map("applicant_name") @db.VarChar(100)
+  fatherName          String                        @map("father_name") @db.VarChar(100)
+  wifeOf              String?                       @map("wife_of") @db.VarChar(100)
+  gotra               String                        @db.VarChar(50)
+  address             String
+  membershipJoinDate  DateTime                      @map("membership_join_date") @db.Date
+  associatedUntil     String                        @map("associated_until") @db.VarChar(255)
+  permanentFee        Decimal                       @map("permanent_fee") @db.Decimal(10, 2)
+  installmentAmount   Decimal                       @map("installment_amount") @db.Decimal(10, 2)
+  totalGrantAmount    Decimal                       @map("total_grant_amount") @db.Decimal(10, 2)
+  totalMembersServing Int                           @map("total_members_serving")
+  rate200             Decimal                       @map("rate_200") @db.Decimal(10, 2)
+  rate300             Decimal                       @map("rate_300") @db.Decimal(10, 2)
+  deductionPercent    Decimal                       @map("deduction_percent") @db.Decimal(5, 2)
+  deductedAmount      Decimal                       @map("deducted_amount") @db.Decimal(10, 2)
+  totalPaidAmount     Decimal                       @map("total_paid_amount") @db.Decimal(10, 2)
+  gender              Gender
+  paymentStatus       Int                           @default(0) @map("payment_status")
+  addedById           String                        @map("added_by_id") @db.Uuid
+  createdAt           DateTime                      @default(now()) @map("created_at")
+  updatedAt           DateTime                      @updatedAt @map("updated_at")
+  deletedAt           DateTime?                     @map("deleted_at")
+  addedBy             User                          @relation(fields: [addedById], references: [id])
+  mayraRegistration   MayraRegistration             @relation(fields: [mayraRegistrationId], references: [id], onDelete: Cascade)
+  payments            MayraCongratulationsPayment[]
+
+  @@index([mayraNumber])
+  @@index([codeNumber])
+  @@index([gender])
+  @@index([addedById])
+  @@index([date])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("mayra_congratulations")
+}
+
+model MayraCongratulationsPayment {
+  id                     String               @id @default(uuid()) @db.Uuid
+  mayraCongratulationsId String               @map("mayra_congratulations_id") @db.Uuid
+  applicationId          String?              @map("application_id") @db.Uuid
+  amount                 Decimal              @db.Decimal(10, 2)
+  category               String               @db.VarChar(50)
+  rashidNumber           String?              @map("rashid_number") @db.VarChar(50)
+  addedById              String               @map("added_by_id") @db.Uuid
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  deletedAt              DateTime?            @map("deleted_at")
+  addedBy                User                 @relation(fields: [addedById], references: [id])
+  mayraCongratulations   MayraCongratulations @relation(fields: [mayraCongratulationsId], references: [id], onDelete: Cascade)
+
+  @@index([mayraCongratulationsId])
+  @@index([addedById, createdAt])
+  @@map("mayra_congratulations_payments")
+}
+
+model LoanApplication {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  formNumber           String?                      @map("form_number") @db.VarChar(50)
+  date                 DateTime                     @db.Date
+  applicantName        String                       @map("applicant_name") @db.VarChar(100)
+  fatherName           String                       @map("father_name") @db.VarChar(100)
+  motherName           String                       @map("mother_name") @db.VarChar(100)
+  address              String
+  reason               String
+  aadhaarUrl           String?                      @map("aadhaar_url") @db.VarChar(512)
+  incomeCertificateUrl String?                      @map("income_certificate_url") @db.VarChar(512)
+  moolNiwasUrl         String?                      @map("mool_niwas_url") @db.VarChar(512)
+  photoUrl             String?                      @map("photo_url") @db.VarChar(512)
+  addedById            String                       @map("added_by_id") @db.Uuid
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  updatedAt            DateTime                     @updatedAt @map("updated_at")
+  deletedAt            DateTime?                    @map("deleted_at")
+  installments         LoanApplicationInstallment[]
+  addedBy              User                         @relation("AddedByLoan", fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([addedById])
+  @@index([date])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("loan_applications")
+}
+
+model LoanApplicationInstallment {
+  id                String            @id @default(uuid()) @db.Uuid
+  loanApplicationId String            @map("loan_application_id") @db.Uuid
+  amount            Decimal           @db.Decimal(10, 2)
+  date              DateTime          @db.Date
+  type              LoanRepaymentType
+  note              String?
+  addedById         String            @map("added_by_id") @db.Uuid
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  deletedAt         DateTime?         @map("deleted_at")
+  addedBy           User              @relation(fields: [addedById], references: [id])
+  loanApplication   LoanApplication   @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([loanApplicationId])
+  @@index([addedById, date])
+  @@map("loan_application_installments")
+}
+
+model FinancialHelp {
+  id            String                     @id @default(uuid()) @db.Uuid
+  formNumber    String                     @map("form_number") @db.VarChar(50)
+  date          DateTime                   @db.Date
+  name          String                     @db.VarChar(100)
+  gender        Gender
+  fatherName    String                     @map("father_name") @db.VarChar(100)
+  address       String
+  district      String                     @db.VarChar(100)
+  village       String                     @db.VarChar(100)
+  tehsil        String                     @db.VarChar(100)
+  phone         String                     @db.VarChar(15)
+  donatedAmount Decimal                    @map("donated_amount") @db.Decimal(10, 2)
+  addedById     String                     @map("added_by_id") @db.Uuid
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  updatedAt     DateTime                   @updatedAt @map("updated_at")
+  deletedAt     DateTime?                  @map("deleted_at")
+  installments  FinancialHelpInstallment[]
+  addedBy       User                       @relation(fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([gender])
+  @@index([addedById])
+  @@index([date])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("financial_helps")
+}
+
+model FinancialHelpInstallment {
+  id              String        @id @default(uuid()) @db.Uuid
+  financialHelpId String        @map("financial_help_id") @db.Uuid
+  amount          Decimal       @db.Decimal(10, 2)
+  date            DateTime      @db.Date
+  note            String?
+  addedById       String        @map("added_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+  addedBy         User          @relation(fields: [addedById], references: [id])
+  financialHelp   FinancialHelp @relation(fields: [financialHelpId], references: [id], onDelete: Cascade)
+
+  @@index([financialHelpId])
+  @@index([addedById, date])
+  @@map("financial_help_installments")
+}
+
+model DisabilityCycle {
+  id              String    @id @default(uuid()) @db.Uuid
+  formNumber      String    @map("form_number") @db.VarChar(50)
+  applicationDate DateTime  @map("application_date") @db.Date
+  applicantName   String    @map("applicant_name") @db.VarChar(100)
+  fatherName      String    @map("father_name") @db.VarChar(100)
+  motherName      String    @map("mother_name") @db.VarChar(100)
+  dateOfBirth     DateTime  @map("date_of_birth") @db.Date
+  aadharNumber    String    @map("aadhar_number") @db.VarChar(12)
+  gotra           String    @db.VarChar(50)
+  age             Int
+  mobile          String    @db.VarChar(15)
+  address         String
+  pinCode         String    @map("pin_code") @db.VarChar(10)
+  tehsil          String    @db.VarChar(100)
+  district        String    @db.VarChar(100)
+  state           String    @db.VarChar(100)
+  photoUrl        String?   @map("photo_url") @db.VarChar(512)
+  addedById       String    @map("added_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  addedBy         User      @relation(fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("disability_cycles")
+}
+
+model MarriageCongratulations {
+  id                  String                           @id @default(uuid()) @db.Uuid
+  date                DateTime                         @db.Date
+  codeNumber          String                           @map("code_number") @db.VarChar(50)
+  marriageNumber      String                           @map("marriage_number") @db.VarChar(50)
+  applicantName       String                           @map("applicant_name") @db.VarChar(100)
+  fatherName          String                           @map("father_name") @db.VarChar(100)
+  wifeOf              String?                          @map("wife_of") @db.VarChar(100)
+  gotra               String                           @db.VarChar(50)
+  address             String
+  membershipJoinDate  DateTime                         @map("membership_join_date") @db.Date
+  associatedUntil     String                           @map("associated_until") @db.VarChar(255)
+  permanentFee        Decimal                          @map("permanent_fee") @db.Decimal(10, 2)
+  installmentAmount   Decimal                          @map("installment_amount") @db.Decimal(10, 2)
+  totalGrantAmount    Decimal                          @map("total_grant_amount") @db.Decimal(10, 2)
+  totalMembersServing Int                              @map("total_members_serving")
+  rate100             Decimal                          @map("rate_100") @db.Decimal(10, 2)
+  rate200             Decimal                          @map("rate_200") @db.Decimal(10, 2)
+  rate300             Decimal                          @map("rate_300") @db.Decimal(10, 2)
+  deductionPercent    Decimal                          @map("deduction_percent") @db.Decimal(5, 2)
+  deductedAmount      Decimal                          @map("deducted_amount") @db.Decimal(10, 2)
+  totalPaidAmount     Decimal                          @map("total_paid_amount") @db.Decimal(10, 2)
+  gender              Gender
+  paymentStatus       Int                              @default(0) @map("payment_status")
+  addedById           String                           @map("added_by_id") @db.Uuid
+  createdAt           DateTime                         @default(now()) @map("created_at")
+  updatedAt           DateTime                         @updatedAt @map("updated_at")
+  deletedAt           DateTime?                        @map("deleted_at")
+  addedBy             User                             @relation(fields: [addedById], references: [id])
+  payments            MarriageCongratulationsPayment[]
+  sewingMachines      MarriageSewingMachine[]
+
+  @@index([marriageNumber])
+  @@index([codeNumber])
+  @@index([gender])
+  @@index([gender, date])
+  @@index([addedById])
+  @@index([date])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("marriage_congratulations")
+}
+
+model MarriageCongratulationsPayment {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  marriageCongratulationsId String                  @map("marriage_congratulations_id") @db.Uuid
+  applicationId             String?                 @map("application_id") @db.Uuid
+  amount                    Decimal                 @db.Decimal(10, 2)
+  category                  String                  @db.VarChar(50)
+  rashidNumber              String?                 @map("rashid_number") @db.VarChar(50)
+  addedById                 String                  @map("added_by_id") @db.Uuid
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  updatedAt                 DateTime                @updatedAt @map("updated_at")
+  deletedAt                 DateTime?               @map("deleted_at")
+  addedBy                   User                    @relation(fields: [addedById], references: [id])
+  marriageCongratulations   MarriageCongratulations @relation(fields: [marriageCongratulationsId], references: [id], onDelete: Cascade)
+
+  @@index([marriageCongratulationsId])
+  @@index([addedById, createdAt])
+  @@index([applicationId])
+  @@index([applicationId, marriageCongratulationsId])
+  @@index([deletedAt])
+  @@map("marriage_congratulations_payments")
+}
+
+model MarriageSewingMachine {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  marriageCongratulationsId String                  @map("marriage_congratulations_id") @db.Uuid
+  formNumber                String                  @map("form_number") @db.VarChar(50)
+  applicationDate           DateTime                @map("application_date") @db.Date
+  applicantName             String                  @map("applicant_name") @db.VarChar(100)
+  fatherName                String                  @map("father_name") @db.VarChar(100)
+  motherName                String                  @map("mother_name") @db.VarChar(100)
+  dateOfBirth               DateTime                @map("date_of_birth") @db.Date
+  aadharNumber              String                  @map("aadhar_number") @db.VarChar(12)
+  gotra                     String                  @db.VarChar(50)
+  age                       Int
+  mobile                    String                  @db.VarChar(15)
+  address                   String
+  pinCode                   String                  @map("pin_code") @db.VarChar(10)
+  tehsil                    String                  @db.VarChar(100)
+  district                  String                  @db.VarChar(100)
+  state                     String                  @db.VarChar(100)
+  gender                    Gender
+  addedById                 String                  @map("added_by_id") @db.Uuid
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  updatedAt                 DateTime                @updatedAt @map("updated_at")
+  deletedAt                 DateTime?               @map("deleted_at")
+  addedBy                   User                    @relation(fields: [addedById], references: [id])
+  marriageCongratulations   MarriageCongratulations @relation(fields: [marriageCongratulationsId], references: [id], onDelete: Cascade)
+
+  @@index([formNumber])
+  @@index([aadharNumber])
+  @@index([addedById])
+  @@index([marriageCongratulationsId])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@map("marriage_sewing_machines")
+}
+
+model PensionYojana {
+  id             String                 @id @default(uuid()) @db.Uuid
+  formNumber     String?                @map("form_number") @db.VarChar(50)
+  date           DateTime               @db.Date
+  name           String                 @db.VarChar(100)
+  fatherName     String                 @map("father_name") @db.VarChar(100)
+  gotra          String                 @db.VarChar(50)
+  dateOfBirth    DateTime?              @map("date_of_birth") @db.Date
+  age            Int
+  gender         Gender
+  village        String                 @db.VarChar(100)
+  tehsil         String                 @db.VarChar(100)
+  district       String                 @db.VarChar(100)
+  mobile         String                 @db.VarChar(15)
+  photoUrl       String?                @map("photo_url") @db.VarChar(512)
+  bankName       String                 @map("bank_name") @db.VarChar(100)
+  accountNumber  String                 @map("account_number") @db.VarChar(50)
+  ifscCode       String                 @map("ifsc_code") @db.VarChar(20)
+  monthlyPension Decimal                @map("monthly_pension") @db.Decimal(10, 2)
+  addedById      String                 @map("added_by_id") @db.Uuid
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  deletedAt      DateTime?              @map("deleted_at")
+  addedBy        User                   @relation(fields: [addedById], references: [id])
+  payments       PensionYojanaPayment[]
+
+  @@index([village])
+  @@index([date])
+  @@index([createdAt])
+  @@index([mobile])
+  @@index([addedById])
+  @@index([deletedAt])
+  @@map("pension_yojana")
+}
+
+model PensionYojanaPayment {
+  id              String        @id @default(uuid()) @db.Uuid
+  pensionYojanaId String        @map("pension_yojana_id") @db.Uuid
+  amount          Decimal       @db.Decimal(10, 2)
+  date            DateTime      @db.Date
+  note            String?
+  addedById       String        @map("added_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+  addedBy         User          @relation(fields: [addedById], references: [id])
+  pensionYojana   PensionYojana @relation(fields: [pensionYojanaId], references: [id], onDelete: Cascade)
+
+  @@index([pensionYojanaId])
+  @@index([addedById, date])
+  @@map("pension_yojana_payments")
+}
+
+model SewingMachineCamp {
+  id               String    @id @default(uuid()) @db.Uuid
+  campNumber       String    @map("camp_number") @db.VarChar(50)
+  formNumber       String    @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime  @map("application_date") @db.Date
+  applicantName    String    @map("applicant_name") @db.VarChar(100)
+  fatherName       String    @map("father_name") @db.VarChar(100)
+  motherName       String    @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime  @map("date_of_birth") @db.Date
+  aadharNumber     String    @map("aadhar_number") @db.VarChar(12)
+  gotra            String    @db.VarChar(50)
+  age              Int
+  mobile           String    @db.VarChar(15)
+  address          String
+  pinCode          String    @map("pin_code") @db.VarChar(10)
+  tehsil           String    @db.VarChar(100)
+  district         String    @db.VarChar(100)
+  state            String    @db.VarChar(100)
+  passportPhotoUrl String?   @map("passport_photo_url") @db.VarChar(512)
+  addedById        String    @map("added_by_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+  addedBy          User      @relation(fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([campNumber])
+  @@index([aadharNumber])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("sewing_machine_camps")
+}
+
+model Payment {
+  id        String    @id @default(uuid()) @db.Uuid
+  date      DateTime  @db.Date
+  type      String    @db.VarChar(100)
+  amount    Decimal   @db.Decimal(10, 2)
+  remark    String?
+  addedById String    @map("added_by_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  addedBy   User      @relation(fields: [addedById], references: [id])
+
+  @@index([date])
+  @@index([addedById])
+  @@index([type])
+  @@map("payments")
+}
+
+model AgentPayment {
+  id          String    @id @default(uuid()) @db.Uuid
+  agentId     String    @map("agent_id") @db.Uuid
+  amount      Decimal   @db.Decimal(10, 2)
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime  @map("end_date") @db.Date
+  paymentDate DateTime  @default(now()) @map("payment_date") @db.Date
+  addedById   String    @map("added_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  addedBy     User      @relation("AdminAddedPayout", fields: [addedById], references: [id])
+  agent       User      @relation("AgentPayout", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, paymentDate])
+  @@index([addedById])
+  @@map("agent_payments")
+}
+
+// One-time local mirror of the legacy panel's `getPaymentList` report, seeded
+// verbatim (including its per-member duplicate rows) so this one report no
+// longer depends on the legacy server being reachable. Not a real ledger of
+// business records -- do not join against it or treat it as a source of truth
+// for any other module.
+model LegacyPaymentEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  legacyId  String   @map("legacy_id") @db.VarChar(50)
+  entryDate String   @map("entry_date") @db.VarChar(30)
+  amount    Decimal  @db.Decimal(12, 2)
+  name      String?
+  source    String   @db.VarChar(100)
+  type      String   @db.VarChar(10)
+  refId     String?  @map("ref_id") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([entryDate])
+  @@index([source])
+  @@index([type])
+  @@index([source, entryDate])
+  @@index([legacyId])
+  @@map("legacy_payment_entries")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(50)
+  entityName String   @map("entity_name") @db.VarChar(100)
+  entityId   String?  @map("entity_id") @db.VarChar(50)
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([entityName, entityId])
+  @@map("audit_logs")
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+enum ApplicationCategory {
+  A
+  B
+  C
+  D
+  E
+  F
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+enum PaymentMode {
+  CASH
+  ONLINE
+  RAZORPAY
+  BANK_TRANSFER
+}
+
+enum LoanRepaymentType {
+  USER_REPAYMENT
+  WE_PAID
+}
+
+enum EPinStatus {
+  ACTIVE
+  ASSIGNED
+  USED
+  BURNT
+}
+
+model CustomerAuth {
+  id            String    @id @default(uuid()) @db.Uuid
+  mobile        String    @unique @db.VarChar(15)
+  passwordHash  String?   @map("password_hash") @db.VarChar(255)
+  otpCode       String?   @map("otp_code") @db.VarChar(10)
+  otpExpiresAt  DateTime? @map("otp_expires_at")
+  otpVerifiedAt DateTime? @map("otp_verified_at")
+  lastLogin     DateTime? @map("last_login")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("customer_auth")
+}
+
+model CustomerPaymentTransaction {
+  id                String    @id @default(uuid()) @db.Uuid
+  mobile            String    @db.VarChar(15)
+  moduleType        String    @map("module_type") @db.VarChar(30)
+  entityId          String    @map("entity_id") @db.Uuid
+  amount            Decimal   @db.Decimal(10, 2)
+  razorpayOrderId   String    @unique @map("razorpay_order_id") @db.VarChar(100)
+  razorpayPaymentId String?   @map("razorpay_payment_id") @db.VarChar(100)
+  status            String    @default("created") @db.VarChar(20)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([mobile])
+  @@index([moduleType, entityId])
+  @@map("customer_payment_transactions")
+}
+
+model Announcement {
+  id              String    @id @default(uuid()) @db.Uuid
+  title           String    @db.VarChar(255)
+  message         String
+  applicationType String    @default("all") @map("application_type") @db.VarChar(30)
+  isActive        Boolean   @default(true) @map("is_active")
+  addedById       String    @map("added_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([applicationType])
+  @@index([deletedAt])
+  @@map("announcements")
+}
+
+model SchemeAgeSlab {
+  id           String   @id @default(uuid()) @db.Uuid
+  schemeType   String   @map("scheme_type") @db.VarChar(50)
+  slabCode     String   @unique @map("slab_code") @db.VarChar(50)
+  slabName     String   @map("slab_name") @db.VarChar(100)
+  minAge       Int      @map("min_age")
+  maxAge       Int?     @map("max_age")
+  joiningFee   Decimal  @map("joining_fee") @db.Decimal(10, 2)
+  installment  Decimal  @map("installment") @db.Decimal(10, 2)
+  status       String   @default("Active") @db.VarChar(20)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("scheme_age_slabs")
+}
+
+model ApplicationConfig {
+  id                      String   @id @default(uuid()) @db.Uuid
+  appName                 String   @default("SAF Foundation") @map("app_name") @db.VarChar(100)
+  mobile                  String   @default("9950730637") @db.VarChar(20)
+  contactEmail            String?  @map("contact_email") @db.VarChar(100)
+  address                 String?  @db.VarChar(255)
+  defaultDeductionPercent Decimal  @default(15.00) @map("default_deduction_percent") @db.Decimal(5, 2)
+  status                  String   @default("ACTIVE") @db.VarChar(20)
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("application_configs")
+}
+
+model ModuleConfig {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(50)
+  name         String   @db.VarChar(100)
+  displayName  String   @map("display_name") @db.VarChar(100)
+  description  String?
+  isEnabled    Boolean  @default(true) @map("is_enabled")
+  sortOrder    Int      @default(0) @map("sort_order")
+  parentModule String?  @map("parent_module") @db.VarChar(50)
+  permissions  Json?
+  status       String   @default("ACTIVE") @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("module_configs")
+}
+
+model SchemeMaster {
+  id               String    @id @default(uuid()) @db.Uuid
+  code             String    @unique @db.VarChar(50)
+  name             String    @db.VarChar(100)
+  moduleCode       String    @map("module_code") @db.VarChar(50)
+  description      String?
+  poolType         String    @default("FEMALE_POOL") @map("pool_type") @db.VarChar(50)
+  deductionPercent Decimal   @default(15.00) @map("deduction_percent") @db.Decimal(5, 2)
+  status           String    @default("ACTIVE") @db.VarChar(20)
+  effectiveFrom    DateTime  @default(now()) @map("effective_from")
+  effectiveTo      DateTime? @map("effective_to")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("scheme_masters")
+}
+
+model SchemeTypeConfig {
+  id            String    @id @default(uuid()) @db.Uuid
+  code          String    @unique @db.VarChar(50)
+  name          String    @db.VarChar(100)
+  amount        Decimal   @db.Decimal(10, 2)
+  description   String?
+  status        String    @default("ACTIVE") @db.VarChar(20)
+  effectiveFrom DateTime  @default(now()) @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("scheme_type_configs")
+}
+
+model PoolConfig {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  gender      String?  @db.VarChar(20)
+  description String?
+  status      String   @default("ACTIVE") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("pool_configs")
+}
+
+model EPin {
+  id            String          @id @default(uuid()) @db.Uuid
+  pinCode       String          @unique @map("pin_code") @db.VarChar(50)
+  schemeCode    String          @map("scheme_code") @db.VarChar(50)
+  slabCode      String?         @map("slab_code") @db.VarChar(50)
+  amount        Decimal         @db.Decimal(10, 2)
+  status        EPinStatus      @default(ACTIVE)
+  generatedById String          @map("generated_by_id") @db.Uuid
+  assignedToId  String?         @map("assigned_to_id") @db.Uuid
+  assignedAt    DateTime?       @map("assigned_at")
+  usedById      String?         @map("used_by_id") @db.Uuid
+  usedAt        DateTime?       @map("used_at")
+  usedInModule  String?         @map("used_in_module") @db.VarChar(50)
+  usedEntityId  String?         @map("used_entity_id") @db.Uuid
+  burntById     String?         @map("burnt_by_id") @db.Uuid
+  burntAt       DateTime?       @map("burnt_at")
+  burnReason    String?         @map("burn_reason")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  auditLogs     EPinAuditLog[]
+
+  @@index([status])
+  @@index([schemeCode])
+  @@index([assignedToId])
+  @@map("e_pins")
+}
+
+model EPinAuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  epinId         String      @map("epin_id") @db.Uuid
+  fromStatus     EPinStatus? @map("from_status")
+  toStatus       EPinStatus  @map("to_status")
+  performedById  String      @map("performed_by_id") @db.Uuid
+  remarks        String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+  epin           EPin        @relation(fields: [epinId], references: [id], onDelete: Cascade)
+
+  @@index([epinId])
+  @@map("e_pin_audit_logs")
+}

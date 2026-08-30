@@ -1,0 +1,93 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Uploaded files
+uploads/*
+!uploads/.gitkeep
+
+# Backups
+backups/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*_log.json
+migration_log.txt
+
+# Temporary files
+scratch/
+_tmp-*.json
+
+# Local migration/import/audit data
+*_data.json
+*_payments.json
+*_applications.json
+*_records.json
+*_report.json
+*_summary.json
+*_audit.json
+*_integrity_report.json
+*_migration_summary.json
+*_failed_records.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Database dumps
+*.sql
+
+# OS
+.DS_Store
+
+# Legacy/local migration scripts
+final_migration_audit_*.json
+migration_log.txt
+prisma/tableConvert.com_deayne.json
+
+# Root-level temporary test scripts
+test*.js
+test*.ts
+test-endpoint.js
+validate_*.js
+validate_*.ts
+verify_*.js
+scratch_*.js
+scratch_*.ts
+
+# Legacy / one-time migration scripts
+_seed_legacy_payments.js
+analyze-json.js
+analyze_failures.js
+audit.js
+audit_insurance.js
+check-*.js
+db_audit.js
+dry_run_*.js
+execute_migration.js
+generate_insurance_reports.js
+import_*.js
+migrate_*.js
+reset_*.js
+retry_failed.js
+parse_xlsx.js
+seed_slabs.ts
+
+# Legacy scripts directory
+scripts/
+
+# Deployment config not used by Render
+apprunner.yaml
+
+# Local audit / verification scripts
+check_agent_deps.js
+check_mc_counts.js
+financial_audit.js
