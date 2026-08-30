@@ -5,8 +5,14 @@ import axios from "axios";
  */
 export class WhatsAppService {
   private static apiUrl = "https://7107.api.greenapi.com";
-  private static idInstance = "710722704724";
-  private static apiTokenInstance = "06b407a002d54f0385a57f9f6c2f4ffd53fc07df01474a5ea6";
+  private static idInstance = "710722703877";
+  private static apiTokenInstance = "8155475884b747f7bab0529dc014374b6ad307fd15b241ad8a";
+
+
+  // private static apiUrl = "https://7107.api.greenapi.com";
+  // private static idInstance = "710722704724";
+  // private static apiTokenInstance = "06b407a002d54f0385a57f9f6c2f4ffd53fc07df01474a5ea6";
+
 
   /**
    * Format standard mobile number into Green API chatId format (e.g. 919876543210@c.us)
@@ -28,7 +34,7 @@ export class WhatsAppService {
       const url = `${this.apiUrl}/waInstance${this.idInstance}/sendMessage/${this.apiTokenInstance}`;
 
       console.log(`Sending WhatsApp message to ${chatId} via Green API...`);
-      
+
       const response = await axios.post(
         url,
         {
