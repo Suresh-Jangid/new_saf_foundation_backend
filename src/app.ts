@@ -18,6 +18,7 @@ import customerRouter from "./modules/customer/customer.routes";
 import configurationRouter from "./modules/configuration/configuration.routes";
 import epinsRouter from "./modules/epins/epins.routes";
 import janniDeliveryRouter from "./modules/janni-delivery/janni-delivery.routes";
+import aawasRouter from "./modules/aawas/aawas.routes";
 import path from "path";
 
 import { AppError } from "./utils/errors";
@@ -109,6 +110,8 @@ app.use("/api/v1/epins", epinsRouter);
 app.use("/api/epins", epinsRouter);
 app.use("/api/v1/janni-delivery", janniDeliveryRouter);
 app.use("/api/janni-delivery", janniDeliveryRouter);
+app.use("/api/v1/aawas", aawasRouter);
+app.use("/api/aawas", aawasRouter);
 
 // apicall gateway (legacy PHP used /api/api.php — now /api)
 app.use("/api", compatibilityRouter);

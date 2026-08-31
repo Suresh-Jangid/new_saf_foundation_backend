@@ -45,6 +45,8 @@ model User {
   sewingMachineCamps        SewingMachineCamp[]
   janniDeliveryApplications JanniDeliveryRegistration[]       @relation("AddedByJanniDelivery")
   janniDeliveryInstallments JanniDeliveryInstallment[]
+  aawasApplications         AawasRegistration[]               @relation("AddedByAawas")
+  aawasInstallments         AawasInstallment[]
 
   @@index([mobile])
   @@index([role])
@@ -1092,4 +1094,75 @@ model JanniDeliveryInstallment {
   @@index([deletedAt])
   @@map("janni_delivery_installments")
 }
+
+model AawasRegistration {
+  id               String             @id @default(uuid()) @db.Uuid
+  srNo             Int                @unique @default(autoincrement()) @map("sr_no")
+  formNumber       String             @unique @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime           @map("application_date") @db.Date
+  applicantName    String             @map("applicant_name") @db.VarChar(100)
+  fatherName       String             @map("father_name") @db.VarChar(100)
+  husbandName      String?            @map("husband_name") @db.VarChar(100)
+  motherName       String?            @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime           @map("date_of_birth") @db.Date
+  age              Int?
+  aadharNumber     String             @map("aadhar_number") @db.VarChar(12)
+  gotra            String             @db.VarChar(50)
+  mobile           String             @db.VarChar(15)
+  address          String
+  pinCode          String             @map("pin_code") @db.VarChar(10)
+  tehsil           String             @db.VarChar(100)
+  district         String             @db.VarChar(100)
+  state            String             @default("Rajasthan") @db.VarChar(100)
+  nomineeName      String?            @map("nominee_name") @db.VarChar(100)
+  nomineeRelation  String?            @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile    String?            @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar    String?            @map("nominee_aadhar") @db.VarChar(12)
+  passportPhotoUrl String?            @map("passport_photo_url") @db.VarChar(512)
+  affidavitUrl     String?            @map("affidavit_url") @db.VarChar(512)
+  gender           Gender             @default(Male)
+  category         ApplicationCategory @default(A)
+  totalAmount      Decimal            @default(15000) @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount    Decimal            @default(15000) @map("pending_amount") @db.Decimal(10, 2)
+  epinCode         String?            @map("epin_code") @db.VarChar(50)
+  isActive         Boolean            @default(true) @map("is_active")
+  addedById        String             @map("added_by_id") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  deletedAt        DateTime?          @map("deleted_at")
+  installments     AawasInstallment[]
+  addedBy          User               @relation("AddedByAawas", fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([gender])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("aawas_registrations")
+}
+
+model AawasInstallment {
+  id             String            @id @default(uuid()) @db.Uuid
+  registrationId String            @map("registration_id") @db.Uuid
+  amount         Decimal           @db.Decimal(10, 2)
+  date           DateTime          @db.Date
+  note           String?
+  rashidNumber   String?           @map("rashid_number") @db.VarChar(50)
+  paymentMode    PaymentMode       @default(CASH) @map("payment_mode")
+  addedById      String            @map("added_by_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+  addedBy        User              @relation(fields: [addedById], references: [id])
+  registration   AawasRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId, date])
+  @@index([addedById, date])
+  @@index([deletedAt])
+  @@map("aawas_installments")
+}
+
 
