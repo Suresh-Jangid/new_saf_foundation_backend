@@ -20,6 +20,7 @@ import epinsRouter from "./modules/epins/epins.routes";
 import path from "path";
 
 import { AppError } from "./utils/errors";
+import { getHealthPayload } from "./utils/environment";
 
 const app = express();
 
@@ -82,14 +83,15 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 
-// Health Check Route
-app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+// Canonical Health Check Handler
+const handleHealthCheck = (_req: Request, res: Response) => {
+  res.status(200).json(getHealthPayload());
+};
+
+// Mount canonical health routes across root and API prefixes
+app.get("/health", handleHealthCheck);
+app.get("/api/health", handleHealthCheck);
+app.get("/api/v1/health", handleHealthCheck);
 
 // Register Module Routes
 app.use("/api/v1/auth", authRouter);
