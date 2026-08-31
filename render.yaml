@@ -1,45 +1,117 @@
-# Render Blueprint Specification for SAF Foundation Dedicated Staging Environment
-# This blueprint provisions a 100% isolated staging web service and PostgreSQL database.
-# It does NOT touch, modify, or connect to the production environment or database.
+# # Render Blueprint Specification for SAF Foundation Dedicated Staging Environment
+# # This blueprint provisions a 100% isolated staging web service and PostgreSQL database.
+# # It does NOT touch, modify, or connect to the production environment or database.
 
-services:
-  - type: web
-    name: saf-foundation-backend-staging
-    runtime: node
-    plan: starter
-    region: singapore
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: sh docker-entrypoint.sh
-    healthCheckPath: /health
-    envVars:
-      - key: NODE_ENV
-        value: staging
-      - key: APP_ENV
-        value: staging
-      - key: PORT
-        value: "5000"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: saf-foundation-db-staging
-          property: connectionString
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
-      - key: JWT_ACCESS_EXPIRATION
-        value: 1d
-      - key: JWT_REFRESH_EXPIRATION
-        value: 30d
-      - key: CORS_ORIGIN
-        value: "http://localhost:3000,http://localhost:3001,https://staging-saf-frontend.vercel.app"
-      - key: RAZORPAY_KEY_ID
-        value: rzp_test_mock_staging
-      - key: RAZORPAY_KEY_SECRET
-        value: rzp_secret_mock_staging
+projects:
+  - name: SAF_Foundation
+    environments:
+      - name: Staging
+        networking:
+          isolation: enabled
 
-databases:
-  - name: saf-foundation-db-staging
-    plan: starter
-    region: singapore
-    databaseName: saf_staging_db
-    user: saf_staging_user
+        services:
+          - type: web
+            name: saf-foundation-backend-staging
+            runtime: node
+            plan: starter
+            region: singapore
+
+            buildCommand: npm ci && npx prisma generate && npm run build
+            startCommand: sh docker-entrypoint.sh
+            healthCheckPath: /health
+            autoDeployTrigger: commit
+
+            envVars:
+              - key: NODE_ENV
+                value: staging
+
+              - key: APP_ENV
+                value: staging
+
+              - key: PORT
+                value: "5000"
+
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: saf-foundation-db-staging
+                  property: connectionString
+
+              - key: JWT_SECRET
+                generateValue: true
+
+              - key: JWT_REFRESH_SECRET
+                generateValue: true
+
+              - key: JWT_ACCESS_EXPIRATION
+                value: 1d
+
+              - key: JWT_REFRESH_EXPIRATION
+                value: 30d
+
+              - key: CORS_ORIGIN
+                value: "http://localhost:3000,http://localhost:3001,https://staging-saf-frontend.vercel.app"
+
+              - key: RAZORPAY_KEY_ID
+                value: rzp_test_mock_staging
+
+              - key: RAZORPAY_KEY_SECRET
+                value: rzp_secret_mock_staging
+
+        databases:
+          - name: saf-foundation-db-staging
+            plan: free
+            region: singapore
+            databaseName: saf_staging_db
+            user: saf_staging_user
+
+
+
+
+# services:
+#   - type: web
+#     name: saf-foundation-backend-staging
+#     runtime: node
+#     plan: starter
+#     region: singapore
+#     buildCommand: npm ci && npx prisma generate && npm run build
+#     startCommand: sh docker-entrypoint.sh
+#     healthCheckPath: /health
+#     envVars:
+#       - key: NODE_ENV
+#         value: staging
+#       - key: APP_ENV
+#         value: staging
+#       - key: PORT
+#         value: "5000"
+#       - key: DATABASE_URL
+#         fromDatabase:
+#           name: saf-foundation-db-staging
+#           property: connectionString
+#       - key: JWT_SECRET
+#         generateValue: true
+#       - key: JWT_REFRESH_SECRET
+#         generateValue: true
+#       - key: JWT_ACCESS_EXPIRATION
+#         value: 1d
+#       - key: JWT_REFRESH_EXPIRATION
+#         value: 30d
+#       - key: CORS_ORIGIN
+#         value: "http://localhost:3000,http://localhost:3001,https://staging-saf-frontend.vercel.app"
+#       - key: RAZORPAY_KEY_ID
+#         value: rzp_test_mock_staging
+#       - key: RAZORPAY_KEY_SECRET
+#         value: rzp_secret_mock_staging
+
+# databases:
+#   - name: saf-foundation-db-staging
+#     plan: starter
+#     region: singapore
+#     databaseName: saf_staging_db
+#     user: saf_staging_user
+
+
+# SAF Foundation - Dedicated Staging Blueprint
+# Production resources are intentionally NOT included.
+
+# SAF Foundation - Dedicated Cloud Staging Blueprint
+# Production resources are NOT included.
