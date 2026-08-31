@@ -10,7 +10,31 @@ export const PRISMA_TX_OPTIONS = {
   timeout: 30000,
 } as const;
 
+export function validateDatabaseEnvironment() {
+  const appEnv = (process.env.APP_ENV || "").toLowerCase().trim();
+  const nodeEnv = (process.env.NODE_ENV || "").toLowerCase().trim();
+  const dbUrl = process.env.DATABASE_URL || "";
+
+  // Fail-fast if staging environment is active but DATABASE_URL is missing
+  if ((appEnv === "staging" || nodeEnv === "staging") && !dbUrl) {
+    throw new Error(
+      "Configuration Error: Staging environment requires a dedicated DATABASE_URL."
+    );
+  }
+
+  // Fail-fast if staging receives a known production database identifier
+  if (
+    (appEnv === "staging" || nodeEnv === "staging") &&
+    dbUrl.toLowerCase().includes("ep-cool-butterfly")
+  ) {
+    throw new Error(
+      "Configuration Error: Production database target detected in staging environment. Aborting startup for safety."
+    );
+  }
+}
+
 function createPrismaClient() {
+  validateDatabaseEnvironment();
   return new PrismaClient().$extends({
     query: {
       $allModels: {
