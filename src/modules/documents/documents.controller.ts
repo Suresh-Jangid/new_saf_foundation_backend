@@ -8,10 +8,10 @@ export class DocumentsController {
   public async generateGeneralPDF(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const pdfBuffer = await service.generateGeneralApplicationPDF(id);
+      const { buffer: pdfBuffer, fileName } = await service.generateGeneralApplicationBond(id);
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=general-application-${id}.pdf`);
+      res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
       res.send(pdfBuffer);
     } catch (error) {
       next(error);

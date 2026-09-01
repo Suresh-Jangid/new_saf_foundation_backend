@@ -7,9 +7,9 @@ import { PDFHelper, PDFTextField, drawDevanagariText } from "../../utils/pdf";
 
 export class DocumentsService {
   /**
-   * Generates General Application PDF
+   * Generates Official General Marriage Bond PDF (Matches Admin UI Generate Bond PDF)
    */
-  public async generateGeneralApplicationPDF(id: string): Promise<Buffer> {
+  public async generateGeneralApplicationBond(id: string): Promise<{ buffer: Buffer; fileName: string }> {
     const app = await prisma.generalApplication.findFirst({
       where: { id, deletedAt: null },
       include: { addedBy: true },
@@ -19,40 +19,235 @@ export class DocumentsService {
       throw new NotFoundError("General Application not found");
     }
 
-    const templatePath = path.join(
-      process.cwd(),
-      "assets",
-      "templates",
-      "general_app_template.pdf"
-    );
+    const isFemale =
+      String(app.gender || "").toLowerCase() === "female" ||
+      String(app.gender) === "महिला";
+    const isMale =
+      String(app.gender || "").toLowerCase() === "male" ||
+      String(app.gender) === "पुरुष";
 
-    const fields: PDFTextField[] = [
-      { text: app.formNumber, x: 480, y: 735, size: 12 },
-      { text: app.applicationDate.toLocaleDateString("en-IN"), x: 480, y: 715, size: 10 },
-      { text: app.applicantName, x: 180, y: 645, size: 12 },
-      { text: app.fatherName, x: 180, y: 615, size: 12 },
-      { text: app.motherName, x: 180, y: 585, size: 12 },
-      { text: app.dateOfBirth.toLocaleDateString("en-IN"), x: 180, y: 555, size: 12 },
-      { text: app.gender, x: 420, y: 555, size: 12 },
-      { text: app.gotra, x: 180, y: 525, size: 12 },
-      { text: app.category, x: 420, y: 525, size: 12 },
-      { text: app.aadharNumber, x: 180, y: 495, size: 12 },
-      { text: app.mobile, x: 420, y: 495, size: 12 },
-      { text: app.address, x: 180, y: 465, size: 10 },
-      { text: `${app.tehsil}, ${app.district}, ${app.state}`, x: 180, y: 435, size: 10 },
-      { text: app.pinCode, x: 420, y: 435, size: 12 },
-      { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
-      { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
-      { text: `Rs. ${Number(app.totalAmount).toLocaleString("en-IN")}`, x: 180, y: 375, size: 12 },
-      { text: `Rs. ${Number(app.pendingAmount).toLocaleString("en-IN")}`, x: 420, y: 375, size: 12 },
-      { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
-    ];
+    // Candidate template paths (supporting gender-specific official Marriage Bond templates)
+    const candidateTemplates = isFemale
+      ? [
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "girl_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "vivah_yojana_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "viva yojana bond(1).pdf"),
+        ]
+      : isMale
+      ? [
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "boys_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "vivah_yojana_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "viva yojana bond(1).pdf"),
+        ]
+      : [
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "vivah_yojana_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "boys_bond.pdf"),
+          path.join(process.cwd(), "public", "pdf", "general_application", "bond", "girl_bond.pdf"),
+        ];
 
-    if (fs.existsSync(templatePath)) {
-      return PDFHelper.drawFieldsOnPDF(templatePath, fields);
-    } else {
-      return this.generatePDFFromScratch("General Application Form", fields);
+    const templatePath = candidateTemplates.find((p) => fs.existsSync(p));
+
+    if (!templatePath || !fs.existsSync(templatePath)) {
+      const fallbackFields: PDFTextField[] = [
+        { text: app.formNumber, x: 480, y: 735, size: 12 },
+        { text: app.applicationDate.toLocaleDateString("en-IN"), x: 480, y: 715, size: 10 },
+        { text: app.applicantName, x: 180, y: 645, size: 12 },
+        { text: app.fatherName, x: 180, y: 615, size: 12 },
+        { text: app.motherName, x: 180, y: 585, size: 12 },
+        { text: app.dateOfBirth.toLocaleDateString("en-IN"), x: 180, y: 555, size: 12 },
+        { text: app.gender, x: 420, y: 555, size: 12 },
+        { text: app.gotra, x: 180, y: 525, size: 12 },
+        { text: app.category, x: 420, y: 525, size: 12 },
+        { text: app.aadharNumber, x: 180, y: 495, size: 12 },
+        { text: app.mobile, x: 420, y: 495, size: 12 },
+        { text: app.address, x: 180, y: 465, size: 10 },
+        { text: `${app.tehsil}, ${app.district}, ${app.state}`, x: 180, y: 435, size: 10 },
+        { text: app.pinCode, x: 420, y: 435, size: 12 },
+        { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
+        { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
+        { text: `Rs. ${Number(app.totalAmount).toLocaleString("en-IN")}`, x: 180, y: 375, size: 12 },
+        { text: `Rs. ${Number(app.pendingAmount).toLocaleString("en-IN")}`, x: 420, y: 375, size: 12 },
+        { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
+      ];
+      const buffer = await this.generatePDFFromScratch("General Application Form", fallbackFields);
+      return { buffer, fileName: `Marriage_Bond_${app.formNumber}.pdf` };
     }
+
+    // Load official PDF template
+    const templateBytes = fs.readFileSync(templatePath);
+    const pdfDoc = await PDFDocument.load(templateBytes);
+
+    // Register fontkit to allow embedding Devanagari TTF fonts
+    try {
+      require("regenerator-runtime/runtime");
+    } catch {}
+    let fontkitAvailable = false;
+    try {
+      const fontkit = require("@pdf-lib/fontkit");
+      pdfDoc.registerFontkit(fontkit);
+      fontkitAvailable = true;
+    } catch (e) {
+      fontkitAvailable = false;
+    }
+
+    const pages = pdfDoc.getPages();
+    const firstPage = pages[0];
+    const { height: pageHeight } = firstPage.getSize();
+
+    // Embed passport photo if available
+    if (app.passportPhotoUrl) {
+      try {
+        let imageBytes: Uint8Array | null = null;
+        let isPng = false;
+
+        if (app.passportPhotoUrl.startsWith("data:image/")) {
+          const base64Data = app.passportPhotoUrl.split(",")[1] || "";
+          imageBytes = Uint8Array.from(Buffer.from(base64Data, "base64"));
+          isPng = app.passportPhotoUrl.startsWith("data:image/png");
+        } else if (
+          app.passportPhotoUrl.startsWith("http://") ||
+          app.passportPhotoUrl.startsWith("https://")
+        ) {
+          const axios = require("axios");
+          const imgRes = await axios.get(app.passportPhotoUrl, {
+            responseType: "arraybuffer",
+            timeout: 5000,
+          });
+          imageBytes = new Uint8Array(imgRes.data);
+          const cType = imgRes.headers["content-type"] || "";
+          isPng = cType.includes("png") || app.passportPhotoUrl.endsWith(".png");
+        } else {
+          const localPath = path.join(
+            process.cwd(),
+            app.passportPhotoUrl.replace(/^\//, "")
+          );
+          if (fs.existsSync(localPath)) {
+            imageBytes = new Uint8Array(fs.readFileSync(localPath));
+            isPng = localPath.endsWith(".png");
+          }
+        }
+
+        if (imageBytes && imageBytes.length > 0) {
+          let image: any;
+          if (isPng) {
+            image = await pdfDoc.embedPng(imageBytes);
+          } else {
+            image = await pdfDoc.embedJpg(imageBytes);
+          }
+
+          if (image) {
+            // Precise passport photo box dimensions for approved Vivah Yojana bond template
+            const imageX = 405;
+            const imageY = 146;
+            const imageWidth = 74;
+            const imageHeight = 84;
+
+            firstPage.drawImage(image, {
+              x: imageX,
+              y: pageHeight - imageY - imageHeight,
+              width: imageWidth,
+              height: imageHeight,
+            });
+          }
+        }
+      } catch (imageError) {
+        console.warn("Could not embed passport photo in Marriage Bond:", imageError);
+      }
+    }
+
+    // Embed Devanagari font (NotoSansDevanagari-Regular.ttf)
+    let font: any;
+    const fontCandidates = [
+      path.join(process.cwd(), "public", "fonts", "NotoSansDevanagari-Regular.ttf"),
+      path.join(process.cwd(), "public", "fonts", "NotoSansDevanagari.ttf"),
+      path.join(process.cwd(), "assets", "fonts", "NotoSansDevanagari-Regular.ttf"),
+    ];
+    const devanagariFontPath = fontCandidates.find((p) => fs.existsSync(p));
+
+    if (devanagariFontPath && fontkitAvailable) {
+      const customFontBytes = fs.readFileSync(devanagariFontPath);
+      font = await pdfDoc.embedFont(customFontBytes, { subset: false });
+    } else {
+      font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    }
+
+    // Helper for drawing text at top-left coordinates matching frontend implementation
+    const drawTextAt = (
+      text: string | number | undefined | null,
+      x: number,
+      topY: number,
+      size = 10,
+      color = rgb(0.1, 0.1, 0.1)
+    ) => {
+      if (text === undefined || text === null || String(text).trim() === "") return;
+      firstPage.drawText(String(text).trim(), {
+        x,
+        y: pageHeight - topY,
+        size,
+        font,
+        color,
+      });
+    };
+
+    // 1. Membership Number Box
+    drawTextAt(app.formNumber, 80, 126, 11, rgb(0, 0.15, 0.6));
+
+    // 2. Application Number Box
+    drawTextAt(app.formNumber, 388, 126, 11, rgb(0, 0.15, 0.6));
+
+    // 3. Applicant Name
+    drawTextAt(app.applicantName, 55, 172, 10);
+
+    // 4. Father's Name
+    drawTextAt(app.fatherName, 230, 172, 10);
+
+    // 5. Age
+    let ageStr = "";
+    if (app.dateOfBirth) {
+      const dob = new Date(app.dateOfBirth);
+      const age = new Date().getFullYear() - dob.getFullYear();
+      if (!isNaN(age) && age > 0) {
+        ageStr = `${age} वर्ष`;
+      }
+    }
+    drawTextAt(ageStr, 348, 172, 9.5);
+
+    // 6. Gotra
+    drawTextAt(app.gotra, 46, 197, 10);
+
+    // 7. Residence / Full Address
+    const fullAddress = [app.address, app.tehsil, app.district].filter(Boolean).join(", ") || app.address;
+    drawTextAt(fullAddress, 208, 197, 9.5);
+
+    // 8. Duration / Maturity
+    drawTextAt("21 वर्ष पूर्ण होने पर", 200, 245, 10, rgb(0.6, 0.1, 0.1));
+
+    // Create a safe filename matching frontend convention
+    const safeName = (app.applicantName || app.formNumber || "bond")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/[^a-zA-Z0-9\s-_]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    let fileName: string;
+    if (isFemale) {
+      fileName = `GIRL_BOND_${safeName || app.formNumber}.pdf`;
+    } else if (isMale) {
+      fileName = `BOYS_BOND_${safeName || app.formNumber}.pdf`;
+    } else {
+      fileName = `VIVAH_YOJANA_BOND_${safeName || app.formNumber}.pdf`;
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    return { buffer: Buffer.from(pdfBytes), fileName };
+  }
+
+  /**
+   * Generates General Application PDF (Returns Buffer)
+   */
+  public async generateGeneralApplicationPDF(id: string): Promise<Buffer> {
+    const { buffer } = await this.generateGeneralApplicationBond(id);
+    return buffer;
   }
 
   /**

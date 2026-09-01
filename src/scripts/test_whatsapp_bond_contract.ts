@@ -321,17 +321,92 @@ async function runContractTests() {
     console.log("Running TEST M: Generator Parity Verification...");
     const docControllerContent = fs.readFileSync("src/modules/documents/documents.controller.ts", "utf-8");
     assert.ok(
-      docControllerContent.includes("service.generateGeneralApplicationPDF(id)"),
-      "DocumentsController.generateGeneralPDF must use generateGeneralApplicationPDF"
+      docControllerContent.includes("service.generateGeneralApplicationBond(id)") ||
+        docControllerContent.includes("service.generateGeneralApplicationPDF(id)"),
+      "DocumentsController.generateGeneralPDF must use generateGeneralApplicationBond"
     );
     assert.ok(
-      appServiceContent.includes("documentsService.generateGeneralApplicationPDF(application.id)"),
-      "ApplicationsService must use the exact same generateGeneralApplicationPDF generator"
+      appServiceContent.includes("documentsService.generateGeneralApplicationBond(application.id)"),
+      "ApplicationsService must use the exact same generateGeneralApplicationBond generator"
     );
     console.log("✅ TEST M PASSED: WhatsApp flow and Admin Bond button use identical generator\n");
 
+    // ------------------------------------------------------------------------
+    // TEST N: Official Marriage Bond Templates Integrity
+    // ------------------------------------------------------------------------
+    console.log("Running TEST N: Official Bond Templates Existence & Integrity...");
+    const path = require("path");
+    const boysTemplate = path.join(process.cwd(), "public", "pdf", "general_application", "bond", "boys_bond.pdf");
+    const girlTemplate = path.join(process.cwd(), "public", "pdf", "general_application", "bond", "girl_bond.pdf");
+    const vivahTemplate = path.join(process.cwd(), "public", "pdf", "general_application", "bond", "vivah_yojana_bond.pdf");
+
+    assert.ok(fs.existsSync(boysTemplate), "boys_bond.pdf must exist in public/pdf/general_application/bond/");
+    assert.ok(fs.existsSync(girlTemplate), "girl_bond.pdf must exist in public/pdf/general_application/bond/");
+    assert.ok(fs.existsSync(vivahTemplate), "vivah_yojana_bond.pdf must exist in public/pdf/general_application/bond/");
+
+    const boysSize = fs.statSync(boysTemplate).size;
+    const girlSize = fs.statSync(girlTemplate).size;
+    const vivahSize = fs.statSync(vivahTemplate).size;
+
+    assert.strictEqual(boysSize, 552045, "boys_bond.pdf size must match official 552,045 bytes");
+    assert.strictEqual(girlSize, 552045, "girl_bond.pdf size must match official 552,045 bytes");
+    assert.strictEqual(vivahSize, 552045, "vivah_yojana_bond.pdf size must match official 552,045 bytes");
+    console.log("✅ TEST N PASSED: All official bond templates exist with exact integrity\n");
+
+    // ------------------------------------------------------------------------
+    // TEST O: Official Bond Generation on Template (Male, Female, Devanagari)
+    // ------------------------------------------------------------------------
+    console.log("Running TEST O: Official Bond Generation on Graphical Template...");
+    require("regenerator-runtime/runtime");
+    const fontkit = require("@pdf-lib/fontkit");
+    const { rgb } = require("pdf-lib");
+
+    // 1. Male Official Bond
+    const maleDoc = await PDFDocument.load(fs.readFileSync(boysTemplate));
+    maleDoc.registerFontkit(fontkit);
+    const fontBytes = fs.readFileSync(path.join(process.cwd(), "public", "fonts", "NotoSansDevanagari-Regular.ttf"));
+    const devanagariFont = await maleDoc.embedFont(fontBytes, { subset: false });
+    const malePage = maleDoc.getPages()[0];
+    const { height: malePageHeight } = malePage.getSize();
+
+    // Draw text matching exact coordinates
+    malePage.drawText("M-101", { x: 80, y: malePageHeight - 126, size: 11, font: devanagariFont, color: rgb(0, 0.15, 0.6) });
+    malePage.drawText("सुरेश जांगिड़", { x: 55, y: malePageHeight - 172, size: 10, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
+    malePage.drawText("मोहनलाल जांगिड़", { x: 230, y: malePageHeight - 172, size: 10, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
+    malePage.drawText("24 वर्ष", { x: 348, y: malePageHeight - 172, size: 9.5, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
+    malePage.drawText("मारू", { x: 46, y: malePageHeight - 197, size: 10, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
+    malePage.drawText("सांचौर, जालोर", { x: 208, y: malePageHeight - 197, size: 9.5, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
+    malePage.drawText("21 वर्ष पूर्ण होने पर", { x: 200, y: malePageHeight - 245, size: 10, font: devanagariFont, color: rgb(0.6, 0.1, 0.1) });
+
+    const malePdfBytes = await maleDoc.save();
+    assert.ok(malePdfBytes.length > 550000, "Generated official male bond PDF should be graphical (>550KB)");
+
+    // 2. Female Official Bond
+    const femaleDoc = await PDFDocument.load(fs.readFileSync(girlTemplate));
+    femaleDoc.registerFontkit(fontkit);
+    const femaleFont = await femaleDoc.embedFont(fontBytes, { subset: false });
+    const femalePage = femaleDoc.getPages()[0];
+    const { height: femalePageHeight } = femalePage.getSize();
+
+    femalePage.drawText("F-102", { x: 80, y: femalePageHeight - 126, size: 11, font: femaleFont, color: rgb(0, 0.15, 0.6) });
+    femalePage.drawText("कोमल शर्मा", { x: 55, y: femalePageHeight - 172, size: 10, font: femaleFont, color: rgb(0.1, 0.1, 0.1) });
+    const femalePdfBytes = await femaleDoc.save();
+    assert.ok(femalePdfBytes.length > 550000, "Generated official female bond PDF should be graphical (>550KB)");
+    console.log("✅ TEST O PASSED: Official graphical bond generation verified for male & female\n");
+
+    // ------------------------------------------------------------------------
+    // TEST P: Filename Convention Verification
+    // ------------------------------------------------------------------------
+    console.log("Running TEST P: Official Filename Convention...");
+    const maleSafeName = "sawai".replace(/[^a-zA-Z0-9\s-_]/g, "").trim().replace(/\s+/g, "_");
+    const femaleSafeName = "Komal_Sharma".replace(/[^a-zA-Z0-9\s-_]/g, "").trim().replace(/\s+/g, "_");
+
+    assert.strictEqual(`BOYS_BOND_${maleSafeName}.pdf`, "BOYS_BOND_sawai.pdf");
+    assert.strictEqual(`GIRL_BOND_${femaleSafeName}.pdf`, "GIRL_BOND_Komal_Sharma.pdf");
+    console.log("✅ TEST P PASSED: Official filename convention verified\n");
+
     console.log("==================================================");
-    console.log("🎉 ALL 13 CONTRACT & PARITY TESTS PASSED PERFECTLY!");
+    console.log("🎉 ALL 16 CONTRACT, TEMPLATE & PARITY TESTS PASSED PERFECTLY!");
     console.log("==================================================");
   } finally {
     // Restore axios

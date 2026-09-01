@@ -350,13 +350,14 @@ export class ApplicationsService {
           console.error("Backend error sending Marriage WhatsApp text notification:", e);
         }
 
-        // 2. Bond PDF Document Delivery
+        // 2. Official General Marriage Bond PDF Document Delivery
         try {
-          const pdfBuffer = await documentsService.generateGeneralApplicationPDF(application.id);
+          const { buffer: pdfBuffer, fileName } =
+            await documentsService.generateGeneralApplicationBond(application.id);
           await WhatsAppService.sendFileByUpload(
             application.mobile,
             pdfBuffer,
-            `Marriage_Bond_${application.formNumber}.pdf`,
+            fileName,
             `SAF Foundation - विवाह योजना आवेदन पत्र (${application.formNumber})`
           );
         } catch (e) {
