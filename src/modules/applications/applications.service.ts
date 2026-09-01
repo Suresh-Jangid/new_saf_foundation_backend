@@ -18,6 +18,9 @@ import { recordLegacyPaymentEntry, formatCashFlowName, formatEmiContributionName
 import { assertAadharAvailable } from "../../utils/aadhar-uniqueness";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { WhatsAppService } from "../../utils/whatsapp";
+import { EpinsService } from "../epins/epins.service";
+
+const epinsService = new EpinsService();
 
 function parseRequiredDate(value: unknown, field: string): Date {
   return parseDateInput(value, field);
@@ -267,6 +270,20 @@ export class ApplicationsService {
       throw new BadRequestError("Applicant name, father name, and Aadhaar are required");
     }
 
+    const rawPin = (data.epinCode || data.pinNumber || data.pinCode || "").trim();
+    const selectedAgentId = data.selectedAgentId || data.agentId || (actorRole === "AGENT" ? addedById : undefined);
+
+    // Validate E-PIN if supplied
+    if (rawPin) {
+      const validationResult = await epinsService.validateEPin(
+        { pinCode: rawPin, agentId: selectedAgentId },
+        { userId: addedById, role: (actorRole as any) || "ADMIN" }
+      );
+      if (!validationResult.valid) {
+        throw new BadRequestError(`E-PIN Validation Failed: ${validationResult.message}`);
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
       await assertAadharAvailable(tx, createData.aadharNumber);
       const formNumber = await nextGeneralFormNumber(tx, data.gender);
@@ -297,12 +314,32 @@ export class ApplicationsService {
         });
       }
 
-      // Send WhatsApp message via Green API
+      // If E-PIN was provided, consume it atomically inside transaction
+      if (rawPin) {
+        await epinsService.consumeEPin(
+          {
+            pinCode: rawPin,
+            applicationId: application.id,
+            applicantName: application.applicantName,
+            module: "GENERAL_MARRIAGE",
+            agentId: selectedAgentId,
+            usedById: addedById,
+            remarks: `Consumed for Marriage Application ${application.formNumber} (${application.applicantName})`,
+          },
+          { userId: addedById, role: (actorRole as any) || "ADMIN" },
+          tx
+        );
+      }
+
+      // Send dynamic standardized WhatsApp thank-you message via Green API
       if (application?.mobile) {
         void (async () => {
           try {
-            const msg = `नमस्ते ${application.applicantName},\n\nपुरबिया प्रजापति बालिका विवाह & सशक्तिकरण फाउण्डेशन के विवाह योजना (आवेदन सं. ${application.formNumber}) मे जुड़ने के लिए आपका बहुत बहुत धन्यवाद 🙏\n\nअधिक जानकारी हेतु संपर्क करें:\nपीराराम तेनगरिया जसोल\n9413032072, 8209467238`;
-            await WhatsAppService.sendTextMessage(application.mobile, msg);
+            await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
+              applicantName: application.applicantName,
+              applicationNumber: application.formNumber,
+              schemeName: "विवाह योजना",
+            });
           } catch (e) {
             console.error("Backend error sending WhatsApp notification:", e);
           }
@@ -618,6 +655,20 @@ export class ApplicationsService {
 
     const aadharNumber = String(data.aadharNumber || "").replace(/\D/g, "");
 
+    const rawPin = (data.epinCode || data.pinNumber || data.pinCode || "").trim();
+    const selectedAgentId = data.selectedAgentId || data.agentId || (actorRole === "AGENT" ? addedById : undefined);
+
+    // Validate E-PIN if supplied
+    if (rawPin) {
+      const validationResult = await epinsService.validateEPin(
+        { pinCode: rawPin, agentId: selectedAgentId },
+        { userId: addedById, role: (actorRole as any) || "ADMIN" }
+      );
+      if (!validationResult.valid) {
+        throw new BadRequestError(`E-PIN Validation Failed: ${validationResult.message}`);
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
       await lockFormNumberSequence(tx, "insurance_application_form_number");
       await assertAadharAvailable(tx, aadharNumber);
@@ -689,12 +740,32 @@ export class ApplicationsService {
         });
       }
 
-      // Send WhatsApp message via Green API
+      // If E-PIN was provided, consume it atomically inside transaction
+      if (rawPin) {
+        await epinsService.consumeEPin(
+          {
+            pinCode: rawPin,
+            applicationId: application.id,
+            applicantName: application.applicantName,
+            module: "INSURANCE_BIMA",
+            agentId: selectedAgentId,
+            usedById: addedById,
+            remarks: `Consumed for Insurance Application ${application.formNumber} (${application.applicantName})`,
+          },
+          { userId: addedById, role: (actorRole as any) || "ADMIN" },
+          tx
+        );
+      }
+
+      // Send dynamic standardized WhatsApp thank-you message via Green API
       if (application?.mobile) {
         void (async () => {
           try {
-            const msg = `नमस्ते ${application.applicantName},\n\nपुरबिया प्रजापति बालिका विवाह & सशक्तिकरण फाउण्डेशन के सुरक्षा योजना (आवेदन सं. ${application.formNumber}) मे जुड़ने के लिए आपका बहुत बहुत धन्यवाद 🙏\n\nअधिक जानकारी हेतु संपर्क करें:\nपीराराम तेनगरिया जसोल\n9413032072, 8209467238`;
-            await WhatsAppService.sendTextMessage(application.mobile, msg);
+            await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
+              applicantName: application.applicantName,
+              applicationNumber: application.formNumber,
+              schemeName: "बीमा योजना",
+            });
           } catch (e) {
             console.error("Backend error sending Insurance WhatsApp notification:", e);
           }

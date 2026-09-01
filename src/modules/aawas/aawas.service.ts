@@ -4,6 +4,7 @@ import { ApplicationCategory, Gender, PaymentMode, Prisma } from "@prisma/client
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { parseDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
+import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
 import {
   AAWAS_TOTAL_BENEFIT,
@@ -103,10 +104,15 @@ export class AawasService {
 
     const rawPin = (data.epinCode || data.pinNumber || "").trim();
 
+    const selectedAgentId =
+      actor.role === "ADMIN" && data.selectedAgentId
+        ? data.selectedAgentId
+        : (actor.role === "AGENT" ? addedById : undefined);
+
     // Validate E-PIN if supplied
     if (rawPin) {
       const validationResult = await epinsService.validateEPin(
-        { pinCode: rawPin },
+        { pinCode: rawPin, agentId: selectedAgentId },
         actor
       );
 
@@ -183,12 +189,28 @@ export class AawasService {
             applicationId: registration.id,
             applicantName: registration.applicantName,
             module: "AAWAS",
+            agentId: selectedAgentId,
             remarks: `Consumed for Aawas Application ${registration.formNumber} (${registration.applicantName})`,
             usedById: actor.userId,
           },
           actor,
           tx
         );
+      }
+
+      // Send dynamic standardized WhatsApp thank-you message via Green API
+      if (registration?.mobile) {
+        void (async () => {
+          try {
+            await WhatsAppService.sendSchemeRegistrationThankYou(registration.mobile, {
+              applicantName: registration.applicantName,
+              applicationNumber: registration.formNumber,
+              schemeName: "आवास योजना",
+            });
+          } catch (e) {
+            console.error("Backend error sending Aawas WhatsApp notification:", e);
+          }
+        })();
       }
 
       return registration;

@@ -15,6 +15,9 @@ import { recordLegacyPaymentEntry, formatCashFlowName, formatEmiContributionName
 import { assertAadharAvailable } from "../../utils/aadhar-uniqueness";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { WhatsAppService } from "../../utils/whatsapp";
+import { EpinsService } from "../epins/epins.service";
+
+const epinsService = new EpinsService();
 
 function parseRequiredDate(value: unknown, field: string): Date {
   return parseDateInput(value, field);
@@ -65,6 +68,23 @@ export class MayraService {
    * Create new Mayra Registration & optional initial installment
    */
   public async createMayraRegistration(data: any, addedById: string, actorRole?: string) {
+    const rawPin = (data.epinCode || data.pinNumber || data.pinCode || "").trim();
+    const selectedAgentId =
+      actorRole !== "AGENT" && data.selectedAgentId && isValidUuid(String(data.selectedAgentId))
+        ? String(data.selectedAgentId)
+        : (actorRole === "AGENT" ? addedById : undefined);
+
+    // Validate E-PIN if supplied
+    if (rawPin) {
+      const validationResult = await epinsService.validateEPin(
+        { pinCode: rawPin, agentId: selectedAgentId },
+        { userId: addedById, role: (actorRole as any) || "ADMIN" }
+      );
+      if (!validationResult.valid) {
+        throw new BadRequestError(`E-PIN Validation Failed: ${validationResult.message}`);
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
       const formNumber = await nextMayraFormNumber(tx);
 
@@ -170,12 +190,32 @@ export class MayraService {
         });
       }
 
-      // Send WhatsApp message via Green API
+      // If E-PIN was provided, consume it atomically inside transaction
+      if (rawPin) {
+        await epinsService.consumeEPin(
+          {
+            pinCode: rawPin,
+            applicationId: registration.id,
+            applicantName: registration.applicantName,
+            module: "MAYRA",
+            agentId: selectedAgentId,
+            usedById: addedById,
+            remarks: `Consumed for Mayra Application ${registration.formNumber} (${registration.applicantName})`,
+          },
+          { userId: addedById, role: (actorRole as any) || "ADMIN" },
+          tx
+        );
+      }
+
+      // Send dynamic standardized WhatsApp thank-you message via Green API
       if (registration?.mobile) {
         void (async () => {
           try {
-            const msg = `नमस्ते ${registration.applicantName},\n\nपुरबिया प्रजापति बालिका विवाह & सशक्तिकरण फाउण्डेशन के मायरा योजना (आवेदन सं. ${registration.formNumber}) मे जुड़ने के लिए आपका बहुत बहुत धन्यवाद 🙏\n\nअधिक जानकारी हेतु संपर्क करें:\nपीराराम तेनगरिया जसोल\n9413032072, 8209467238`;
-            await WhatsAppService.sendTextMessage(registration.mobile, msg);
+            await WhatsAppService.sendSchemeRegistrationThankYou(registration.mobile, {
+              applicantName: registration.applicantName,
+              applicationNumber: registration.formNumber,
+              schemeName: "मायरा योजना",
+            });
           } catch (e) {
             console.error("Backend error sending Mayra WhatsApp notification:", e);
           }

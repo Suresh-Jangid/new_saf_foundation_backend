@@ -49,6 +49,8 @@ export interface EPinConsumeInput {
   applicationId: string;
   applicantName?: string;
   module?: string;
+  agentId?: string;
+  selectedAgentId?: string;
   remarks?: string;
   usedById: string;
 }

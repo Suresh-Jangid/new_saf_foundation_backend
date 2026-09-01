@@ -1,6 +1,47 @@
 import axios from "axios";
 
 /**
+ * Authoritative Hindi Scheme Display Names
+ */
+export const SCHEME_HINDI_NAMES: Record<string, string> = {
+  GENERAL: "विवाह योजना",
+  GENERAL_MARRIAGE: "विवाह योजना",
+  MARRIAGE: "विवाह योजना",
+  MAYRA: "मायरा योजना",
+  INSURANCE: "बीमा योजना",
+  INSURANCE_BIMA: "बीमा योजना",
+  JANNI_DELIVERY: "जन्नी डिलीवरी योजना",
+  AAWAS: "आवास योजना",
+  LADO_BAHIN: "लाडो बहिन योजना",
+  DHUNDHOTSAV: "धुंधोत्सव योजना",
+  SHUBHLAXMI: "शुभलक्ष्मी योजना",
+  SHUBH_LAXMI: "शुभलक्ष्मी योजना",
+};
+
+/**
+ * Resolves scheme key/code to its authoritative Hindi display name
+ */
+export function resolveSchemeDisplayName(schemeKey: string): string {
+  if (!schemeKey) return "योजना";
+  const normalized = schemeKey.trim().toUpperCase().replace(/[-\s]/g, "_");
+  return SCHEME_HINDI_NAMES[normalized] || schemeKey;
+}
+
+export interface SchemeThankYouParams {
+  applicantName: string;
+  applicationNumber: string;
+  schemeName: string;
+}
+
+/**
+ * Formats the standardized SAF Foundation Thank-You Message
+ */
+export function formatSchemeThankYouMessage(params: SchemeThankYouParams): string {
+  const schemeName = resolveSchemeDisplayName(params.schemeName);
+  return `नमस्ते ${params.applicantName},\n\n**SAF Foundation शिक्षा अमृतम फाउंडेशन** के ${schemeName}\n(आवेदन सं. ${params.applicationNumber}) में जुड़ने के लिए आपका बहुत बहुत धन्यवाद 🙏\n\nअधिक जानकारी हेतु संपर्क करें:\n**शिक्षा अमृतम फाउंडेशन**\n\n+91 8107054565\n+91 8619484745\n+91 8432863996\n\ninfo@shikshaamritamfoundation.org`;
+}
+
+/**
  * Green API WhatsApp Integration Service
  */
 export class WhatsAppService {
@@ -61,6 +102,18 @@ export class WhatsAppService {
         error: error.response?.data || error.message,
       };
     }
+  }
+
+  /**
+   * Send dynamic standardized scheme registration thank-you message
+   */
+  public static async sendSchemeRegistrationThankYou(
+    toMobile: string,
+    params: SchemeThankYouParams
+  ) {
+    if (!toMobile) return { success: false, error: "No mobile provided" };
+    const message = formatSchemeThankYouMessage(params);
+    return this.sendTextMessage(toMobile, message);
   }
 
   /**

@@ -9,6 +9,7 @@ import {
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { parseDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
+import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
 import {
   SHUBH_LAXMI_FORM_PREFIX,
@@ -171,10 +172,15 @@ export class ShubhLaxmiService {
 
     const rawPin = (data.epinCode || data.pinNumber || "").trim();
 
+    const selectedAgentId =
+      actor.role === "ADMIN" && data.selectedAgentId
+        ? data.selectedAgentId
+        : (actor.role === "AGENT" ? addedById : undefined);
+
     // Validate E-PIN if supplied
     if (rawPin) {
       const validationResult = await epinsService.validateEPin(
-        { pinCode: rawPin },
+        { pinCode: rawPin, agentId: selectedAgentId },
         actor
       );
 
@@ -271,12 +277,28 @@ export class ShubhLaxmiService {
             applicationId: registration.id,
             applicantName: registration.applicantName,
             module: "SHUBH_LAXMI",
+            agentId: selectedAgentId,
             remarks: `Consumed for ShubhLaxmi Application ${registration.formNumber} (${registration.applicantName})`,
             usedById: actor.userId,
           },
           actor,
           tx
         );
+      }
+
+      // Send dynamic standardized WhatsApp thank-you message via Green API
+      if (registration?.mobile) {
+        void (async () => {
+          try {
+            await WhatsAppService.sendSchemeRegistrationThankYou(registration.mobile, {
+              applicantName: registration.applicantName,
+              applicationNumber: registration.formNumber,
+              schemeName: "शुभलक्ष्मी योजना",
+            });
+          } catch (e) {
+            console.error("Backend error sending ShubhLaxmi WhatsApp notification:", e);
+          }
+        })();
       }
 
       return registration;

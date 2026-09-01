@@ -33,7 +33,7 @@ export class EpinsController {
         ...req.body,
         generatedById: req.user.userId,
       });
-      return res.status(201).json(result);
+      return res.status(200).json(result);
     } catch (error) {
       return next(error);
     }

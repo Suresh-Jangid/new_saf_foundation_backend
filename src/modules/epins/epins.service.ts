@@ -49,7 +49,7 @@ export class EpinsService {
     }
 
     const ALLOWED_TRANSITIONS: Record<EPinLifecycleStatus, EPinLifecycleStatus[]> = {
-      ACTIVE: ["ASSIGNED", "BURNT"],
+      ACTIVE: ["ASSIGNED", "BURNT", "USED"],
       ASSIGNED: ["USED", "BURNT"],
       USED: [],   // Terminal state
       BURNT: [],  // Terminal state
@@ -183,7 +183,7 @@ export class EpinsService {
   /**
    * 2. BATCH GENERATION: Generate batch of cryptographically secure E-PINs (Admin Only)
    */
-  public async generateEPins(input: EPinGenerateInput) {
+  public async generateEPins(input: EPinGenerateInput, txClient?: PrismaTransactionClient) {
     const count = Math.min(Math.max(input.count || 1, 1), 500);
     const amount = Number(input.schemeAmount ?? input.amount);
 
@@ -198,7 +198,7 @@ export class EpinsService {
     const batchEntropy = crypto.randomBytes(3).toString("hex").toUpperCase();
     const batchNumber = `BATCH-${dateStr}-${batchEntropy}`;
 
-    return prisma.$transaction(async (tx) => {
+    const execute = async (tx: PrismaTransactionClient) => {
       const generatedPins = [];
 
       for (let i = 0; i < count; i++) {
@@ -241,27 +241,50 @@ export class EpinsService {
         generatedPins.push(epin);
       }
 
+      const formattedPins = generatedPins.map((p) => ({
+        id: p.id,
+        pinNumber: p.pinCode,
+        pinCode: p.pinCode,
+        schemeAmount: Number(p.amount),
+        amount: Number(p.amount),
+        schemeTypeId: p.schemeCode,
+        schemeCode: p.schemeCode,
+        slabCode: p.slabCode,
+        poolId: p.slabCode,
+        status: p.status,
+        generatedById: p.generatedById,
+        assignedToId: null,
+        assignedAgentId: null,
+        assignedAgentName: null,
+        assignedAt: null,
+        usedById: null,
+        usedAt: null,
+        usedInModule: null,
+        usedEntityId: null,
+        applicationId: null,
+        burntById: null,
+        burntAt: null,
+        burnReason: null,
+        batchNumber,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      }));
+
       return {
         success: true,
         message: `Successfully generated ${generatedPins.length} E-PIN(s)`,
         count: generatedPins.length,
         batchNumber,
-        pins: generatedPins.map((p) => ({
-          id: p.id,
-          pinNumber: p.pinCode,
-          pinCode: p.pinCode,
-          schemeAmount: Number(p.amount),
-          amount: Number(p.amount),
-          schemeTypeId: p.schemeCode,
-          schemeCode: p.schemeCode,
-          slabCode: p.slabCode,
-          poolId: p.slabCode,
-          status: p.status,
-          batchNumber,
-          createdAt: p.createdAt,
-        })),
+        data: formattedPins,
+        pins: formattedPins,
+        epin: formattedPins[0] || null,
       };
-    }, PRISMA_TX_OPTIONS);
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+    return prisma.$transaction(execute, PRISMA_TX_OPTIONS);
   }
 
   /**
@@ -341,7 +364,11 @@ export class EpinsService {
   /**
    * 4. VALIDATION: Check E-PIN validity, status, and agent ownership without state mutation
    */
-  public async validateEPin(input: EPinValidateInput, actor: { userId: string; role: "ADMIN" | "AGENT" }) {
+  public async validateEPin(
+    input: EPinValidateInput,
+    actor: { userId: string; role: "ADMIN" | "AGENT" },
+    txClient?: PrismaTransactionClient
+  ) {
     const rawCode = (input.pinNumber || input.pinCode || "").trim();
     if (!rawCode) {
       return {
@@ -351,7 +378,8 @@ export class EpinsService {
       };
     }
 
-    const pin = await prisma.ePin.findUnique({
+    const client = txClient || prisma;
+    const pin = await client.ePin.findUnique({
       where: { pinCode: rawCode },
     });
 
@@ -363,9 +391,9 @@ export class EpinsService {
       };
     }
 
-    const effectiveAgentId = actor.role === "AGENT" ? actor.userId : input.agentId;
+    const effectiveAgentId = input.agentId || (actor.role === "AGENT" ? actor.userId : undefined);
 
-    // Check agent ownership rule
+    // Check agent ownership rule for already-assigned PINs
     if (effectiveAgentId && pin.assignedToId && pin.assignedToId !== effectiveAgentId) {
       return {
         success: true,
@@ -384,10 +412,27 @@ export class EpinsService {
       };
     }
 
-    if (pin.status === "ACTIVE" && actor.role === "AGENT") {
+    if (pin.status === "ACTIVE") {
+      if (actor.role === "AGENT" && pin.assignedToId !== actor.userId) {
+        return {
+          success: true,
+          valid: false,
+          status: pin.status,
+          pinNumber: pin.pinCode,
+          pinCode: pin.pinCode,
+          schemeAmount: Number(pin.amount),
+          amount: Number(pin.amount),
+          schemeTypeId: pin.schemeCode,
+          schemeCode: pin.schemeCode,
+          slabCode: pin.slabCode,
+          poolId: pin.slabCode,
+          assignedAgentId: pin.assignedToId,
+          message: "E-PIN is currently unassigned. Please contact Admin to assign this E-PIN to your account",
+        };
+      }
       return {
         success: true,
-        valid: false,
+        valid: true,
         status: pin.status,
         pinNumber: pin.pinCode,
         pinCode: pin.pinCode,
@@ -398,7 +443,7 @@ export class EpinsService {
         slabCode: pin.slabCode,
         poolId: pin.slabCode,
         assignedAgentId: pin.assignedToId,
-        message: "E-PIN is currently unassigned. Please contact Admin to assign this E-PIN to your account",
+        message: "E-PIN is active and ready for registration assignment",
       };
     }
 
@@ -456,7 +501,7 @@ export class EpinsService {
   }
 
   /**
-   * 5. CONSUMPTION: Atomically consume an assigned E-PIN (ASSIGNED -> USED)
+   * 5. CONSUMPTION: Atomically consume an E-PIN with optional registration-time agent assignment
    */
   public async consumeEPin(
     input: EPinConsumeInput,
@@ -477,7 +522,7 @@ export class EpinsService {
         throw new NotFoundError(`E-PIN code '${rawCode}' not found`);
       }
 
-      // Concurrency & state checks
+      // Terminal state checks
       if (pin.status === "USED") {
         throw new ConflictError("E-PIN has already been used and cannot be consumed again");
       }
@@ -486,35 +531,116 @@ export class EpinsService {
         throw new ConflictError(`E-PIN is burnt/revoked: ${pin.burnReason || "Revoked"}`);
       }
 
-      // If actor is an AGENT, enforce agent assignment ownership
-      if (actor.role === "AGENT" && pin.assignedToId !== actor.userId) {
-        throw new ForbiddenError("You do not have permission to consume this E-PIN (not assigned to you)");
-      }
+      const targetAgentId = input.agentId || input.selectedAgentId || (actor.role === "AGENT" ? actor.userId : null);
 
-      // Validate state transition
-      this.validateTransition(pin.status as EPinLifecycleStatus, "USED");
-
+      let updated;
       const now = new Date();
-      const updated = await tx.ePin.update({
-        where: { id: pin.id },
-        data: {
-          status: "USED",
-          usedById: actor.userId,
-          usedAt: now,
-          usedInModule: input.module || "APPLICATIONS",
-          usedEntityId: input.applicationId,
-        },
-      });
 
-      await tx.ePinAuditLog.create({
-        data: {
-          epinId: pin.id,
-          fromStatus: pin.status as EPinStatus,
-          toStatus: "USED",
-          performedById: actor.userId,
-          remarks: input.remarks || `Consumed for application ${input.applicationId} (${input.applicantName || "Beneficiary"})`,
-        },
-      });
+      if (pin.status === "ACTIVE") {
+        if (actor.role === "ADMIN") {
+          if (targetAgentId) {
+            // Validate target agent exists
+            const targetAgent = await tx.user.findFirst({
+              where: { id: targetAgentId, deletedAt: null },
+            });
+            if (!targetAgent) {
+              throw new NotFoundError("Target agent for E-PIN assignment was not found");
+            }
+
+            // Step 1: Registration-time atomic assignment (ACTIVE -> ASSIGNED)
+            await tx.ePinAuditLog.create({
+              data: {
+                epinId: pin.id,
+                fromStatus: "ACTIVE",
+                toStatus: "ASSIGNED",
+                performedById: actor.userId,
+                remarks: `Registration-time assigned to Agent: ${targetAgent.name} (${targetAgent.mobile})`,
+              },
+            });
+
+            // Step 2: Immediate consumption (ASSIGNED -> USED)
+            updated = await tx.ePin.update({
+              where: { id: pin.id },
+              data: {
+                status: "USED",
+                assignedToId: targetAgentId,
+                assignedAt: now,
+                usedById: actor.userId,
+                usedAt: now,
+                usedInModule: input.module || "APPLICATIONS",
+                usedEntityId: input.applicationId,
+              },
+            });
+
+            await tx.ePinAuditLog.create({
+              data: {
+                epinId: pin.id,
+                fromStatus: "ASSIGNED",
+                toStatus: "USED",
+                performedById: actor.userId,
+                remarks: input.remarks || `Consumed for application ${input.applicationId} (${input.applicantName || "Beneficiary"})`,
+              },
+            });
+          } else {
+            // Admin direct consumption without agent assignment (ACTIVE -> USED)
+            updated = await tx.ePin.update({
+              where: { id: pin.id },
+              data: {
+                status: "USED",
+                usedById: actor.userId,
+                usedAt: now,
+                usedInModule: input.module || "APPLICATIONS",
+                usedEntityId: input.applicationId,
+              },
+            });
+
+            await tx.ePinAuditLog.create({
+              data: {
+                epinId: pin.id,
+                fromStatus: "ACTIVE",
+                toStatus: "USED",
+                performedById: actor.userId,
+                remarks: input.remarks || `Consumed for application ${input.applicationId} (${input.applicantName || "Beneficiary"})`,
+              },
+            });
+          }
+        } else {
+          // Agent role cannot claim unassigned E-PINs directly
+          throw new ForbiddenError("E-PIN is currently unassigned. Please contact Admin to assign this E-PIN to your account");
+        }
+      } else if (pin.status === "ASSIGNED") {
+        if (targetAgentId && pin.assignedToId && pin.assignedToId !== targetAgentId) {
+          throw new ConflictError("E-PIN is assigned to another agent and cannot be used for this registration");
+        }
+
+        if (actor.role === "AGENT" && pin.assignedToId !== actor.userId) {
+          throw new ForbiddenError("You do not have permission to consume this E-PIN (not assigned to you)");
+        }
+
+        // Transition ASSIGNED -> USED
+        updated = await tx.ePin.update({
+          where: { id: pin.id },
+          data: {
+            status: "USED",
+            usedById: actor.userId,
+            usedAt: now,
+            usedInModule: input.module || "APPLICATIONS",
+            usedEntityId: input.applicationId,
+          },
+        });
+
+        await tx.ePinAuditLog.create({
+          data: {
+            epinId: pin.id,
+            fromStatus: "ASSIGNED",
+            toStatus: "USED",
+            performedById: actor.userId,
+            remarks: input.remarks || `Consumed for application ${input.applicationId} (${input.applicantName || "Beneficiary"})`,
+          },
+        });
+      } else {
+        throw new ConflictError(`Invalid E-PIN state '${pin.status}' for consumption`);
+      }
 
       return {
         success: true,

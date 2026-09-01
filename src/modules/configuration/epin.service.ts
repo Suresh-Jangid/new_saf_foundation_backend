@@ -39,7 +39,7 @@ export class EPinService {
     }
 
     const ALLOWED_TRANSITIONS: Record<EPinLifecycleStatus, EPinLifecycleStatus[]> = {
-      ACTIVE: ["ASSIGNED", "BURNT"],
+      ACTIVE: ["ASSIGNED", "BURNT", "USED"],
       ASSIGNED: ["USED", "BURNT"],
       USED: [],   // Terminal state
       BURNT: [],  // Terminal state
@@ -58,7 +58,7 @@ export class EPinService {
   /**
    * Generate one or more E-PINs in ACTIVE status (Admin only)
    */
-  public async generateEPins(input: EPinCreateInput) {
+  public async generateEPins(input: EPinCreateInput, txClient?: PrismaTransactionClient) {
     const count = Math.min(Math.max(input.count || 1, 1), 500);
     if (input.amount <= 0 || !Number.isFinite(input.amount)) {
       throw new BadRequestError("E-PIN amount must be a positive number");
@@ -67,7 +67,7 @@ export class EPinService {
     const schemeCode = input.schemeCode.toUpperCase().trim();
     const slabCode = input.slabCode ? input.slabCode.toUpperCase().trim() : null;
 
-    return prisma.$transaction(async (tx) => {
+    const execute = async (tx: PrismaTransactionClient) => {
       const generatedPins = [];
 
       for (let i = 0; i < count; i++) {
@@ -110,20 +110,47 @@ export class EPinService {
         generatedPins.push(epin);
       }
 
+      const formattedPins = generatedPins.map((p) => ({
+        id: p.id,
+        pinNumber: p.pinCode,
+        pinCode: p.pinCode,
+        schemeCode: p.schemeCode,
+        schemeTypeId: p.schemeCode,
+        slabCode: p.slabCode,
+        poolId: p.slabCode,
+        amount: Number(p.amount),
+        schemeAmount: Number(p.amount),
+        status: p.status,
+        generatedById: p.generatedById,
+        assignedToId: null,
+        assignedAgentId: null,
+        assignedAgentName: null,
+        assignedAt: null,
+        usedById: null,
+        usedAt: null,
+        usedInModule: null,
+        usedEntityId: null,
+        applicationId: null,
+        burntById: null,
+        burntAt: null,
+        burnReason: null,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      }));
+
       return {
         success: true,
         count: generatedPins.length,
-        pins: generatedPins.map((p) => ({
-          id: p.id,
-          pinCode: p.pinCode,
-          schemeCode: p.schemeCode,
-          slabCode: p.slabCode,
-          amount: Number(p.amount),
-          status: p.status,
-          createdAt: p.createdAt,
-        })),
+        data: formattedPins,
+        pins: formattedPins,
+        epin: formattedPins[0] || null,
       };
-    }, PRISMA_TX_OPTIONS);
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+    return prisma.$transaction(execute, PRISMA_TX_OPTIONS);
   }
 
   /**

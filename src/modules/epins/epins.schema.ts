@@ -67,6 +67,8 @@ export const epinConsumeSchema = z.object({
     applicationId: z.string().min(1, "applicationId is required"),
     applicantName: z.string().optional(),
     module: z.string().optional(),
+    agentId: z.string().optional(),
+    selectedAgentId: z.string().optional(),
     remarks: z.string().optional(),
   }).refine((data) => Boolean(data.pinNumber || data.pinCode), {
     message: "pinNumber or pinCode is required",
