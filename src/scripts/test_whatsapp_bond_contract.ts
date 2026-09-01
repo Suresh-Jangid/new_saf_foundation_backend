@@ -315,8 +315,23 @@ async function runContractTests() {
     );
     console.log("✅ TEST L PASSED: Multipart auto-boundary verified\n");
 
+    // ------------------------------------------------------------------------
+    // TEST M: Parity Between Generate Bond PDF & WhatsApp Bond Delivery
+    // ------------------------------------------------------------------------
+    console.log("Running TEST M: Generator Parity Verification...");
+    const docControllerContent = fs.readFileSync("src/modules/documents/documents.controller.ts", "utf-8");
+    assert.ok(
+      docControllerContent.includes("service.generateGeneralApplicationPDF(id)"),
+      "DocumentsController.generateGeneralPDF must use generateGeneralApplicationPDF"
+    );
+    assert.ok(
+      appServiceContent.includes("documentsService.generateGeneralApplicationPDF(application.id)"),
+      "ApplicationsService must use the exact same generateGeneralApplicationPDF generator"
+    );
+    console.log("✅ TEST M PASSED: WhatsApp flow and Admin Bond button use identical generator\n");
+
     console.log("==================================================");
-    console.log("🎉 ALL 12 CONTRACT & PDF TESTS PASSED PERFECTLY!");
+    console.log("🎉 ALL 13 CONTRACT & PARITY TESTS PASSED PERFECTLY!");
     console.log("==================================================");
   } finally {
     // Restore axios
