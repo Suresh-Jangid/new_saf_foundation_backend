@@ -21,6 +21,7 @@ import janniDeliveryRouter from "./modules/janni-delivery/janni-delivery.routes"
 import aawasRouter from "./modules/aawas/aawas.routes";
 import ladoBahinRouter from "./modules/lado-bahin/lado-bahin.routes";
 import dhundhotsavRouter from "./modules/dhundhotsav/dhundhotsav.routes";
+import shubhLaxmiRouter from "./modules/shubh-laxmi/shubh-laxmi.routes";
 import path from "path";
 
 import { AppError } from "./utils/errors";
@@ -118,6 +119,10 @@ app.use("/api/v1/lado-bahin", ladoBahinRouter);
 app.use("/api/lado-bahin", ladoBahinRouter);
 app.use("/api/v1/dhundhotsav", dhundhotsavRouter);
 app.use("/api/dhundhotsav", dhundhotsavRouter);
+app.use("/api/v1/shubh-laxmi", shubhLaxmiRouter);
+app.use("/api/shubh-laxmi", shubhLaxmiRouter);
+app.use("/api/v1/shubhlaxmi", shubhLaxmiRouter);
+app.use("/api/shubhlaxmi", shubhLaxmiRouter);
 
 // apicall gateway (legacy PHP used /api/api.php — now /api)
 app.use("/api", compatibilityRouter);
