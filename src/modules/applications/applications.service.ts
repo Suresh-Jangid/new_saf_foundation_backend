@@ -19,8 +19,10 @@ import { assertAadharAvailable } from "../../utils/aadhar-uniqueness";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
+import { DocumentsService } from "../documents/documents.service";
 
 const epinsService = new EpinsService();
+const documentsService = new DocumentsService();
 
 function parseRequiredDate(value: unknown, field: string): Date {
   return parseDateInput(value, field);
@@ -284,7 +286,7 @@ export class ApplicationsService {
       }
     }
 
-    return prisma.$transaction(async (tx) => {
+    const application = await prisma.$transaction(async (tx) => {
       await assertAadharAvailable(tx, createData.aadharNumber);
       const formNumber = await nextGeneralFormNumber(tx, data.gender);
 
@@ -331,23 +333,39 @@ export class ApplicationsService {
         );
       }
 
-      // Send dynamic standardized WhatsApp thank-you message via Green API
-      if (application?.mobile) {
-        void (async () => {
-          try {
-            await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
-              applicantName: application.applicantName,
-              applicationNumber: application.formNumber,
-              schemeName: "विवाह योजना",
-            });
-          } catch (e) {
-            console.error("Backend error sending WhatsApp notification:", e);
-          }
-        })();
-      }
-
       return application;
     }, PRISMA_TX_OPTIONS);
+
+    // Send dynamic standardized WhatsApp thank-you message & Bond PDF via Green API
+    if (application?.mobile) {
+      void (async () => {
+        // 1. Text Message
+        try {
+          await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
+            applicantName: application.applicantName,
+            applicationNumber: application.formNumber,
+            schemeName: "विवाह योजना",
+          });
+        } catch (e) {
+          console.error("Backend error sending Marriage WhatsApp text notification:", e);
+        }
+
+        // 2. Bond PDF Document Delivery
+        try {
+          const pdfBuffer = await documentsService.generateGeneralApplicationPDF(application.id);
+          await WhatsAppService.sendFileByUpload(
+            application.mobile,
+            pdfBuffer,
+            `Marriage_Bond_${application.formNumber}.pdf`,
+            `SAF Foundation - विवाह योजना आवेदन पत्र (${application.formNumber})`
+          );
+        } catch (e) {
+          console.error("Backend error sending Marriage WhatsApp Bond PDF:", e);
+        }
+      })();
+    }
+
+    return application;
   }
 
   /**
@@ -669,7 +687,7 @@ export class ApplicationsService {
       }
     }
 
-    return prisma.$transaction(async (tx) => {
+    const application = await prisma.$transaction(async (tx) => {
       await lockFormNumberSequence(tx, "insurance_application_form_number");
       await assertAadharAvailable(tx, aadharNumber);
 
@@ -757,23 +775,39 @@ export class ApplicationsService {
         );
       }
 
-      // Send dynamic standardized WhatsApp thank-you message via Green API
-      if (application?.mobile) {
-        void (async () => {
-          try {
-            await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
-              applicantName: application.applicantName,
-              applicationNumber: application.formNumber,
-              schemeName: "बीमा योजना",
-            });
-          } catch (e) {
-            console.error("Backend error sending Insurance WhatsApp notification:", e);
-          }
-        })();
-      }
-
       return application;
     }, PRISMA_TX_OPTIONS);
+
+    // Send dynamic standardized WhatsApp thank-you message & Bond PDF via Green API
+    if (application?.mobile) {
+      void (async () => {
+        // 1. Text Message
+        try {
+          await WhatsAppService.sendSchemeRegistrationThankYou(application.mobile, {
+            applicantName: application.applicantName,
+            applicationNumber: application.formNumber,
+            schemeName: "बीमा योजना",
+          });
+        } catch (e) {
+          console.error("Backend error sending Insurance WhatsApp text notification:", e);
+        }
+
+        // 2. Bond PDF Document Delivery
+        try {
+          const pdfBuffer = await documentsService.generateInsuranceApplicationPDF(application.id);
+          await WhatsAppService.sendFileByUpload(
+            application.mobile,
+            pdfBuffer,
+            `Insurance_Bond_${application.formNumber}.pdf`,
+            `SAF Foundation - बीमा योजना आवेदन पत्र (${application.formNumber})`
+          );
+        } catch (e) {
+          console.error("Backend error sending Insurance WhatsApp Bond PDF:", e);
+        }
+      })();
+    }
+
+    return application;
   }
 
   /**

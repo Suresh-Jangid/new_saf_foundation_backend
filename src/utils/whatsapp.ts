@@ -45,14 +45,9 @@ export function formatSchemeThankYouMessage(params: SchemeThankYouParams): strin
  * Green API WhatsApp Integration Service
  */
 export class WhatsAppService {
-  private static apiUrl = "https://7107.api.greenapi.com";
-  private static idInstance = "710722703877";
-  private static apiTokenInstance = "8155475884b747f7bab0529dc014374b6ad307fd15b241ad8a";
-
-
-  // private static apiUrl = "https://7107.api.greenapi.com";
-  // private static idInstance = "710722704724";
-  // private static apiTokenInstance = "06b407a002d54f0385a57f9f6c2f4ffd53fc07df01474a5ea6";
+  private static apiUrl = process.env.GREEN_API_URL || "https://7107.api.greenapi.com";
+  private static idInstance = process.env.GREEN_API_ID_INSTANCE || "710722703877";
+  private static apiTokenInstance = process.env.GREEN_API_TOKEN_INSTANCE || "8155475884b747f7bab0529dc014374b6ad307fd15b241ad8a";
 
 
   /**
@@ -136,5 +131,56 @@ export class WhatsAppService {
     }
 
     return this.sendTextMessage(toMobile, messageText);
+  }
+
+  /**
+   * Send file/document (e.g. PDF Bond) via Green API sendFileByUpload
+   */
+  public static async sendFileByUpload(
+    toMobile: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    caption?: string
+  ): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      if (!toMobile) return { success: false, error: "No mobile provided" };
+      if (!fileBuffer || fileBuffer.length === 0) return { success: false, error: "Empty file buffer" };
+
+      const chatId = this.formatChatId(toMobile);
+      const url = `${this.apiUrl}/waInstance${this.idInstance}/sendFileByUpload/${this.apiTokenInstance}`;
+
+      console.log(`Sending WhatsApp file (${fileName}) to ${chatId} via Green API...`);
+
+      const formData = new FormData();
+      formData.append("chatId", chatId);
+      formData.append("fileName", fileName);
+      if (caption) {
+        formData.append("caption", caption);
+      }
+      formData.append(
+        "file",
+        new Blob([fileBuffer], { type: "application/pdf" }),
+        fileName
+      );
+
+      const response = await axios.post(url, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 30000,
+      });
+
+      console.log(`✅ WhatsApp file sent successfully to ${chatId}. IdMessage:`, response.data?.idMessage);
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      console.error(
+        "❌ Error sending WhatsApp file via Green API:",
+        error.response?.data || error.message
+      );
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
   }
 }

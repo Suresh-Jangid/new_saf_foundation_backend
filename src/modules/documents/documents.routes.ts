@@ -9,6 +9,7 @@ const controller = new DocumentsController();
 router.use(authenticate as any);
 
 router.get("/general/:id", controller.generateGeneralPDF.bind(controller));
+router.get("/insurance/:id", controller.generateInsurancePDF.bind(controller));
 router.get("/mayra/:id", controller.generateMayraPDF.bind(controller));
 router.get("/bond/:id", controller.generateBondPDF.bind(controller));
 

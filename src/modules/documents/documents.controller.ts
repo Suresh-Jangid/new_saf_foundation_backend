@@ -31,6 +31,19 @@ export class DocumentsController {
     }
   }
 
+  public async generateInsurancePDF(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const pdfBuffer = await service.generateInsuranceApplicationPDF(id);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=insurance-application-${id}.pdf`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public async generateBondPDF(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;

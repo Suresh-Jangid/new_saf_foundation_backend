@@ -45,13 +45,62 @@ export class DocumentsService {
       { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
       { text: `₹${Number(app.totalAmount).toLocaleString("hi-IN")}`, x: 180, y: 375, size: 12 },
       { text: `₹${Number(app.pendingAmount).toLocaleString("hi-IN")}`, x: 420, y: 375, size: 12 },
-      { text: app.addedBy.name, x: 180, y: 345, size: 12 },
+      { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
     ];
 
     if (fs.existsSync(templatePath)) {
       return PDFHelper.drawFieldsOnPDF(templatePath, fields);
     } else {
       return this.generatePDFFromScratch("General Application Form", fields);
+    }
+  }
+
+  /**
+   * Generates Insurance Application PDF (Suraksha Bima Bond)
+   */
+  public async generateInsuranceApplicationPDF(id: string): Promise<Buffer> {
+    const app = await prisma.insuranceApplication.findFirst({
+      where: { id, deletedAt: null },
+      include: { addedBy: true },
+    });
+
+    if (!app) {
+      throw new NotFoundError("Insurance Application not found");
+    }
+
+    const templatePath = path.join(
+      process.cwd(),
+      "assets",
+      "templates",
+      "insurance_app_template.pdf"
+    );
+
+    const fields: PDFTextField[] = [
+      { text: app.formNumber, x: 480, y: 735, size: 12 },
+      { text: app.applicationDate.toLocaleDateString("en-IN"), x: 480, y: 715, size: 10 },
+      { text: app.applicantName, x: 180, y: 645, size: 12 },
+      { text: app.fatherName, x: 180, y: 615, size: 12 },
+      { text: app.wifeName || app.motherName || "N/A", x: 180, y: 585, size: 12 },
+      { text: app.dateOfBirth.toLocaleDateString("en-IN"), x: 180, y: 555, size: 12 },
+      { text: app.gender, x: 420, y: 555, size: 12 },
+      { text: app.gotra, x: 180, y: 525, size: 12 },
+      { text: app.category, x: 420, y: 525, size: 12 },
+      { text: app.aadharNumber, x: 180, y: 495, size: 12 },
+      { text: app.mobile, x: 420, y: 495, size: 12 },
+      { text: app.address, x: 180, y: 465, size: 10 },
+      { text: `${app.tehsil}, ${app.district}, ${app.state}`, x: 180, y: 435, size: 10 },
+      { text: app.pinCode, x: 420, y: 435, size: 12 },
+      { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
+      { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
+      { text: `₹${Number(app.totalAmount).toLocaleString("hi-IN")}`, x: 180, y: 375, size: 12 },
+      { text: `₹${Number(app.pendingAmount).toLocaleString("hi-IN")}`, x: 420, y: 375, size: 12 },
+      { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
+    ];
+
+    if (fs.existsSync(templatePath)) {
+      return PDFHelper.drawFieldsOnPDF(templatePath, fields);
+    } else {
+      return this.generatePDFFromScratch("Suraksha Bima Application Form", fields);
     }
   }
 
