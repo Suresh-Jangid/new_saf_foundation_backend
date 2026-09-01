@@ -47,6 +47,8 @@ model User {
   janniDeliveryInstallments JanniDeliveryInstallment[]
   aawasApplications         AawasRegistration[]               @relation("AddedByAawas")
   aawasInstallments         AawasInstallment[]
+  ladoBahinApplications     LadoBahinRegistration[]           @relation("AddedByLadoBahin")
+  ladoBahinInstallments     LadoBahinInstallment[]
 
   @@index([mobile])
   @@index([role])
@@ -1164,5 +1166,86 @@ model AawasInstallment {
   @@index([deletedAt])
   @@map("aawas_installments")
 }
+
+enum LadoBahinAccountType {
+  LADO_BAHIN_300
+  LADO_BAHIN_1000
+}
+
+model LadoBahinRegistration {
+  id               String                 @id @default(uuid()) @db.Uuid
+  srNo             Int                    @unique @default(autoincrement()) @map("sr_no")
+  formNumber       String                 @unique @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime               @map("application_date") @db.Date
+  applicantName    String                 @map("applicant_name") @db.VarChar(100)
+  fatherName       String                 @map("father_name") @db.VarChar(100)
+  husbandName      String?                @map("husband_name") @db.VarChar(100)
+  motherName       String?                @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime               @map("date_of_birth") @db.Date
+  age              Int?
+  aadharNumber     String                 @map("aadhar_number") @db.VarChar(12)
+  gotra            String                 @db.VarChar(50)
+  mobile           String                 @db.VarChar(15)
+  address          String
+  pinCode          String                 @map("pin_code") @db.VarChar(10)
+  tehsil           String                 @db.VarChar(100)
+  district         String                 @db.VarChar(100)
+  state            String                 @default("Rajasthan") @db.VarChar(100)
+  nomineeName      String?                @map("nominee_name") @db.VarChar(100)
+  nomineeRelation  String?                @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile    String?                @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar    String?                @map("nominee_aadhar") @db.VarChar(12)
+  passportPhotoUrl String?                @map("passport_photo_url") @db.VarChar(512)
+  affidavitUrl     String?                @map("affidavit_url") @db.VarChar(512)
+  gender           Gender                 @default(Female)
+  category         ApplicationCategory    @default(A)
+  schemeType       String                 @default("LADO_BAHIN") @map("scheme_type") @db.VarChar(50)
+  pool             String                 @default("FEMALE_POOL") @map("pool") @db.VarChar(50)
+  membershipFee    Decimal                @default(5100) @map("membership_fee") @db.Decimal(10, 2)
+  epinCode         String?                @map("epin_code") @db.VarChar(50)
+  isActive         Boolean                @default(true) @map("is_active")
+  addedById        String                 @map("added_by_id") @db.Uuid
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  deletedAt        DateTime?              @map("deleted_at")
+  installments     LadoBahinInstallment[]
+  addedBy          User                   @relation("AddedByLadoBahin", fields: [addedById], references: [id])
+
+  @@index([formNumber])
+  @@index([mobile])
+  @@index([aadharNumber])
+  @@index([gender])
+  @@index([schemeType])
+  @@index([pool])
+  @@index([addedById])
+  @@index([applicationDate])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("lado_bahin_registrations")
+}
+
+model LadoBahinInstallment {
+  id             String                @id @default(uuid()) @db.Uuid
+  registrationId String                @map("registration_id") @db.Uuid
+  accountType    LadoBahinAccountType  @map("account_type")
+  amount         Decimal               @db.Decimal(10, 2)
+  date           DateTime              @db.Date
+  note           String?
+  rashidNumber   String?               @map("rashid_number") @db.VarChar(50)
+  paymentMode    PaymentMode           @default(CASH) @map("payment_mode")
+  addedById      String                @map("added_by_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  deletedAt      DateTime?             @map("deleted_at")
+  addedBy        User                  @relation(fields: [addedById], references: [id])
+  registration   LadoBahinRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId, accountType, date])
+  @@index([accountType])
+  @@index([addedById, date])
+  @@index([deletedAt])
+  @@map("lado_bahin_installments")
+}
+
 
 
