@@ -202,6 +202,19 @@ export class ShubhLaxmiService {
     return prisma.$transaction(async (tx) => {
       const formNumber = await nextShubhLaxmiFormNumber(tx);
 
+      const existingInTx = await tx.shubhLaxmiRegistration.findFirst({
+        where: {
+          aadharNumber: rawAadhar,
+          deletedAt: null,
+        },
+      });
+
+      if (existingInTx) {
+        throw new ConflictError(
+          `An active ShubhLaxmi registration already exists for Aadhaar ${rawAadhar} (Form: ${existingInTx.formNumber})`
+        );
+      }
+
       const registration = await tx.shubhLaxmiRegistration.create({
         data: {
           formNumber,
