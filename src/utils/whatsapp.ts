@@ -164,9 +164,6 @@ export class WhatsAppService {
       );
 
       const response = await axios.post(url, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
         timeout: 30000,
       });
 

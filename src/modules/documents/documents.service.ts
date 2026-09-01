@@ -3,7 +3,7 @@ import fs from "fs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "../../config/db";
 import { NotFoundError } from "../../utils/errors";
-import { PDFHelper, PDFTextField } from "../../utils/pdf";
+import { PDFHelper, PDFTextField, drawDevanagariText } from "../../utils/pdf";
 
 export class DocumentsService {
   /**
@@ -43,8 +43,8 @@ export class DocumentsService {
       { text: app.pinCode, x: 420, y: 435, size: 12 },
       { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
       { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
-      { text: `₹${Number(app.totalAmount).toLocaleString("hi-IN")}`, x: 180, y: 375, size: 12 },
-      { text: `₹${Number(app.pendingAmount).toLocaleString("hi-IN")}`, x: 420, y: 375, size: 12 },
+      { text: `Rs. ${Number(app.totalAmount).toLocaleString("en-IN")}`, x: 180, y: 375, size: 12 },
+      { text: `Rs. ${Number(app.pendingAmount).toLocaleString("en-IN")}`, x: 420, y: 375, size: 12 },
       { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
     ];
 
@@ -92,8 +92,8 @@ export class DocumentsService {
       { text: app.pinCode, x: 420, y: 435, size: 12 },
       { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
       { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
-      { text: `₹${Number(app.totalAmount).toLocaleString("hi-IN")}`, x: 180, y: 375, size: 12 },
-      { text: `₹${Number(app.pendingAmount).toLocaleString("hi-IN")}`, x: 420, y: 375, size: 12 },
+      { text: `Rs. ${Number(app.totalAmount).toLocaleString("en-IN")}`, x: 180, y: 375, size: 12 },
+      { text: `Rs. ${Number(app.pendingAmount).toLocaleString("en-IN")}`, x: 420, y: 375, size: 12 },
       { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
     ];
 
@@ -180,11 +180,11 @@ export class DocumentsService {
       { text: bond.address, x: 200, y: 510, size: 10 },
       { text: bond.membershipJoinDate.toLocaleDateString("en-IN"), x: 200, y: 470, size: 12 },
       { text: bond.associatedUntil, x: 450, y: 470, size: 12 },
-      { text: `₹${Number(bond.permanentFee).toLocaleString("hi-IN")}`, x: 200, y: 430, size: 12 },
-      { text: `₹${Number(bond.installmentAmount).toLocaleString("hi-IN")}`, x: 450, y: 430, size: 12 },
-      { text: `₹${Number(bond.totalGrantAmount).toLocaleString("hi-IN")}`, x: 200, y: 390, size: 12 },
+      { text: `Rs. ${Number(bond.permanentFee).toLocaleString("en-IN")}`, x: 200, y: 430, size: 12 },
+      { text: `Rs. ${Number(bond.installmentAmount).toLocaleString("en-IN")}`, x: 450, y: 430, size: 12 },
+      { text: `Rs. ${Number(bond.totalGrantAmount).toLocaleString("en-IN")}`, x: 200, y: 390, size: 12 },
       { text: bond.totalMembersServing.toString(), x: 450, y: 390, size: 12 },
-      { text: `₹${Number(bond.totalPaidAmount).toLocaleString("hi-IN")}`, x: 200, y: 330, size: 14 },
+      { text: `Rs. ${Number(bond.totalPaidAmount).toLocaleString("en-IN")}`, x: 200, y: 330, size: 14 },
     ];
 
     if (fs.existsSync(templatePath)) {
@@ -234,19 +234,44 @@ export class DocumentsService {
 
     // 2. Draw Fields sequentially down the page (ignoring template coordinate values for cleaner fallback rendering)
     let currentY = 710;
-    fields.forEach((field) => {
-      if (!field.text) return;
+    for (const field of fields) {
+      if (!field.text) continue;
+      const rawText = field.text.toString().replace(/₹/g, "Rs. ");
 
-      // Extract field label if we can infer it, else draw text
-      page.drawText(field.text.toString(), {
-        x: 80,
-        y: currentY,
-        size: 11,
-        font: fontRegular,
-        color: rgb(0.1, 0.1, 0.1),
-      });
+      try {
+        if (/[^\x00-\x7F]/.test(rawText)) {
+          await drawDevanagariText(
+            pdfDoc,
+            page,
+            841.89,
+            rawText,
+            80,
+            841.89 - currentY,
+            11,
+            fontRegular
+          );
+        } else {
+          page.drawText(rawText, {
+            x: 80,
+            y: currentY,
+            size: 11,
+            font: fontRegular,
+            color: rgb(0.1, 0.1, 0.1),
+          });
+        }
+      } catch (err) {
+        // Fallback: draw ASCII sanitized text to ensure PDF generation never throws
+        const sanitized = rawText.replace(/[^\x00-\x7F]/g, "?");
+        page.drawText(sanitized, {
+          x: 80,
+          y: currentY,
+          size: 11,
+          font: fontRegular,
+          color: rgb(0.1, 0.1, 0.1),
+        });
+      }
       currentY -= 25;
-    });
+    }
 
     // Footer
     page.drawLine({

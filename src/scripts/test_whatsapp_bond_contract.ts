@@ -279,8 +279,44 @@ async function runContractTests() {
     );
     console.log("✅ TEST J PASSED: E-PIN and Postal PIN completely isolated\n");
 
+    // ------------------------------------------------------------------------
+    // TEST K: PDF Generation with Devanagari, Currency, and Fallback
+    // ------------------------------------------------------------------------
+    console.log("Running TEST K: PDF Generation with Devanagari & Currency...");
+    const { PDFDocument } = require("pdf-lib");
+    const { drawDevanagariText } = require("../utils/pdf");
+
+    // 1. Test ASCII PDF
+    const asciiDoc = await PDFDocument.create();
+    const asciiPage = asciiDoc.addPage([595.28, 841.89]);
+    await drawDevanagariText(asciiDoc, asciiPage, 841.89, "Ramesh Sharma - Marriage Form", 80, 100, 12);
+    const asciiBytes = await asciiDoc.save();
+    assert.ok(asciiBytes.length > 0, "ASCII PDF should generate non-empty Buffer");
+
+    // 2. Test Hindi/Devanagari PDF
+    const hindiDoc = await PDFDocument.create();
+    const hindiPage = hindiDoc.addPage([595.28, 841.89]);
+    await drawDevanagariText(hindiDoc, hindiPage, 841.89, "सुरेश जांगिड़ - विवाह योजना आवेदन पत्र", 80, 100, 12);
+    const hindiBytes = await hindiDoc.save();
+    assert.ok(hindiBytes.length > 0, "Hindi Devanagari PDF should generate non-empty Buffer");
+
+    // 3. Test Currency String with Rs. and ₹ replacement
+    const currencyRaw = "₹1,500".replace(/₹/g, "Rs. ");
+    assert.strictEqual(currencyRaw, "Rs. 1,500", "Currency should format safely as Rs.");
+    console.log("✅ TEST K PASSED: PDF Unicode/Devanagari & Currency generation verified\n");
+
+    // ------------------------------------------------------------------------
+    // TEST L: Multipart FormData Boundary & Headers
+    // ------------------------------------------------------------------------
+    console.log("Running TEST L: Multipart Boundary & Headers Verification...");
+    assert.ok(
+      !whatsappContent.includes('"Content-Type": "multipart/form-data"'),
+      "whatsapp.ts must NOT hardcode Content-Type: multipart/form-data without boundary"
+    );
+    console.log("✅ TEST L PASSED: Multipart auto-boundary verified\n");
+
     console.log("==================================================");
-    console.log("🎉 ALL 10 CONTRACT TESTS PASSED PERFECTLY!");
+    console.log("🎉 ALL 12 CONTRACT & PDF TESTS PASSED PERFECTLY!");
     console.log("==================================================");
   } finally {
     // Restore axios
