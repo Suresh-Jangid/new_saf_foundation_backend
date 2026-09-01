@@ -220,7 +220,7 @@ export class DocumentsService {
     drawTextAt(fullAddress, 208, 197, 9.5);
 
     // 8. Duration / Maturity
-    drawTextAt("21 वर्ष पूर्ण होने पर", 200, 245, 10, rgb(0.6, 0.1, 0.1));
+    drawTextAt("बारह महीने", 200, 245, 10, rgb(0.6, 0.1, 0.1));
 
     // Create a safe filename matching frontend convention
     const safeName = (app.applicantName || app.formNumber || "bond")

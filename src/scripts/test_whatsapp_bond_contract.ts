@@ -376,7 +376,7 @@ async function runContractTests() {
     malePage.drawText("24 वर्ष", { x: 348, y: malePageHeight - 172, size: 9.5, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
     malePage.drawText("मारू", { x: 46, y: malePageHeight - 197, size: 10, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
     malePage.drawText("सांचौर, जालोर", { x: 208, y: malePageHeight - 197, size: 9.5, font: devanagariFont, color: rgb(0.1, 0.1, 0.1) });
-    malePage.drawText("21 वर्ष पूर्ण होने पर", { x: 200, y: malePageHeight - 245, size: 10, font: devanagariFont, color: rgb(0.6, 0.1, 0.1) });
+    malePage.drawText("बारह महीने", { x: 200, y: malePageHeight - 245, size: 10, font: devanagariFont, color: rgb(0.6, 0.1, 0.1) });
 
     const malePdfBytes = await maleDoc.save();
     assert.ok(malePdfBytes.length > 550000, "Generated official male bond PDF should be graphical (>550KB)");
