@@ -3945,33 +3945,40 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           }
         }
 
+        const existingRecord = await prisma.marriageCongratulations.findUnique({
+          where: { id: payload.id },
+        });
+        if (!existingRecord) {
+          return res.status(404).json({ error: true, message: "Marriage congratulations record not found" });
+        }
+
         const result = await prisma.marriageCongratulations.update({
           where: { id: payload.id },
           data: {
-            date: newDate,
-            codeNumber: payload.codeNumber,
-            marriageNumber: payload.marriageNumber,
-            applicantName: payload.applicantName,
-            fatherName: payload.fatherName,
-            wifeOf: payload.wifeOf || null,
-            gotra: payload.gotra,
-            address: payload.address,
-            membershipJoinDate: newJoinDate,
+            date: newDate ?? existingRecord.date,
+            codeNumber: payload.codeNumber ?? existingRecord.codeNumber,
+            marriageNumber: payload.marriageNumber ?? existingRecord.marriageNumber,
+            applicantName: payload.applicantName ?? existingRecord.applicantName,
+            fatherName: payload.fatherName ?? existingRecord.fatherName,
+            wifeOf: payload.wifeOf !== undefined ? (payload.wifeOf ? String(payload.wifeOf).trim() : null) : existingRecord.wifeOf,
+            gotra: payload.gotra ?? existingRecord.gotra,
+            address: payload.address ?? existingRecord.address,
+            membershipJoinDate: newJoinDate ?? existingRecord.membershipJoinDate,
             associatedUntil:
               payload.associatedUntil !== undefined
                 ? String(payload.associatedUntil)
-                : undefined,
-            permanentFee: Number(payload.permanentFee || 0),
-            installmentAmount: Number(payload.installmentAmount || 0),
-            totalGrantAmount: Number(payload.totalGrantAmount || 0),
-            totalMembersServing: Number(payload.totalMembersServing || 0),
-            rate100: Number(payload.rate100 || 0),
-            rate200: Number(payload.rate200 || 0),
-            rate300: Number(payload.rate300 || 0),
-            deductionPercent: Number(payload.deductionPercent || 0),
-            deductedAmount: Number(payload.deductedAmount || 0),
-            totalPaidAmount: Number(payload.totalPaidAmount || 0),
-            gender: payload.gender,
+                : existingRecord.associatedUntil,
+            permanentFee: payload.permanentFee !== undefined ? Number(payload.permanentFee) : Number(existingRecord.permanentFee),
+            installmentAmount: payload.installmentAmount !== undefined ? Number(payload.installmentAmount) : Number(existingRecord.installmentAmount),
+            totalGrantAmount: payload.totalGrantAmount !== undefined ? Number(payload.totalGrantAmount) : Number(existingRecord.totalGrantAmount),
+            totalMembersServing: payload.totalMembersServing !== undefined ? Number(payload.totalMembersServing) : Number(existingRecord.totalMembersServing),
+            rate100: payload.rate100 !== undefined ? Number(payload.rate100) : Number(existingRecord.rate100),
+            rate200: payload.rate200 !== undefined ? Number(payload.rate200) : Number(existingRecord.rate200),
+            rate300: payload.rate300 !== undefined ? Number(payload.rate300) : Number(existingRecord.rate300),
+            deductionPercent: payload.deductionPercent !== undefined ? Number(payload.deductionPercent) : Number(existingRecord.deductionPercent),
+            deductedAmount: payload.deductedAmount !== undefined ? Number(payload.deductedAmount) : Number(existingRecord.deductedAmount),
+            totalPaidAmount: payload.totalPaidAmount !== undefined ? Number(payload.totalPaidAmount) : Number(existingRecord.totalPaidAmount),
+            gender: payload.gender ?? existingRecord.gender,
           }
         });
         return res.json({ status: true, error: false, message: "Marriage congratulations updated successfully", data: result });

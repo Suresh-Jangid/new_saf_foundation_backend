@@ -90,9 +90,9 @@ export const createMarriageCongratsSchema = z.object({
     rate100: z.preprocess((val) => Number(val), z.number().nonnegative()),
     rate200: z.preprocess((val) => Number(val), z.number().nonnegative()),
     rate300: z.preprocess((val) => Number(val), z.number().nonnegative()),
-    deductionPercent: z.preprocess((val) => Number(val), z.number().nonnegative()),
-    deductedAmount: z.preprocess((val) => Number(val), z.number().nonnegative()),
-    totalPaidAmount: z.preprocess((val) => Number(val), z.number().nonnegative()),
+    deductionPercent: z.preprocess((val) => (val === undefined || val === null || val === "" ? 15 : Number(val)), z.number().nonnegative()).default(15),
+    deductedAmount: z.preprocess((val) => (val === undefined || val === null || val === "" ? 0 : Number(val)), z.number().nonnegative()).optional(),
+    totalPaidAmount: z.preprocess((val) => (val === undefined || val === null || val === "" ? 0 : Number(val)), z.number().nonnegative()).optional(),
     gender: z.enum(["Male", "Female", "Other"]),
   }),
 });

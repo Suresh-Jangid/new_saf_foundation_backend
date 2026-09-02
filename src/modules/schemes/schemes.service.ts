@@ -15,6 +15,9 @@ import { resolveAssociatedUntilText } from "../../utils/associated-until";
 import { recordLegacyPaymentEntry, formatCashFlowName, formatEmiContributionName } from "../../utils/legacy-payment-entry";
 import { assertAadharAvailable } from "../../utils/aadhar-uniqueness";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
+import { ConfigurationService } from "../configuration/configuration.service";
+
+const configService = new ConfigurationService();
 
 function parseMarriageDate(value: unknown, field: string): Date {
   return parseDateInput(value, field);
@@ -872,6 +875,20 @@ export class SchemesService {
           const categoryCounts = await computeMarriagePoolCounts(tx, gender, eventDate);
           const membersServing = categoryCounts.A + categoryCounts.B + categoryCounts.C;
 
+          // Compute authoritative financial fields for new Marriage Congratulations:
+          const calculatedTotal =
+            Number(data.totalGrantAmount || 0) ||
+            (categoryCounts.A * 100 + categoryCounts.B * 200 + categoryCounts.C * 300);
+
+          // Authoritative deduction percentage from configuration architecture (defaults to 15.0)
+          const configuredScheme = await configService.getSchemeByCode("GENERAL_MARRIAGE");
+          const deductionPercent = Number(configuredScheme?.deductionPercent ?? 15.0);
+
+          // Client-supplied financial values (deductionPercent, deductedAmount, totalPaidAmount)
+          // are strictly IGNORED for new records to guarantee authoritative calculations.
+          const deductedAmount = Math.round((calculatedTotal * deductionPercent) / 100);
+          const totalPaidAmount = calculatedTotal - deductedAmount;
+
           const record = await tx.marriageCongratulations.create({
             data: {
               date: eventDate,
@@ -886,14 +903,14 @@ export class SchemesService {
               associatedUntil: resolveAssociatedUntilText(data),
               permanentFee: Number(data.permanentFee || 0),
               installmentAmount: Number(data.installmentAmount || 0),
-              totalGrantAmount: Number(data.totalGrantAmount || 0),
+              totalGrantAmount: calculatedTotal,
               totalMembersServing: membersServing,
               rate100: categoryCounts.A,
               rate200: categoryCounts.B,
               rate300: categoryCounts.C,
-              deductionPercent: Number(data.deductionPercent || 0),
-              deductedAmount: Number(data.deductedAmount || 0),
-              totalPaidAmount: Number(data.totalPaidAmount || 0),
+              deductionPercent,
+              deductedAmount,
+              totalPaidAmount,
               gender,
               addedById: resolvedAddedById,
             },

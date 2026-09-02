@@ -64,7 +64,7 @@ export const INITIAL_SCHEME_TYPES: SchemeTypeItem[] = [
 ];
 
 export const INITIAL_SCHEMES: SchemeMasterItem[] = [
-  { code: "GENERAL_MARRIAGE", name: "General Marriage Scheme", moduleCode: "GENERAL_MARRIAGE", poolType: "FEMALE_POOL", deductionPercent: 15.0, status: "ACTIVE" },
+  { code: "GENERAL_MARRIAGE", name: "General Marriage Scheme", moduleCode: "GENERAL_MARRIAGE", description: "Marriage Grant Administrative Deduction (15%)", poolType: "FEMALE_POOL", deductionPercent: 15.0, status: "ACTIVE" },
   { code: "MAYRA", name: "Mayra Scheme", moduleCode: "MAYRA", poolType: "FEMALE_POOL", deductionPercent: 15.0, status: "ACTIVE" },
   { code: "INSURANCE_BIMA", name: "Insurance Suraksha Bima Yojana", moduleCode: "INSURANCE_BIMA", poolType: "FEMALE_POOL", deductionPercent: 10.0, status: "ACTIVE" },
   { code: "JANNI_DELIVERY", name: "Janni Delivery Registration", moduleCode: "JANNI_DELIVERY", poolType: "FEMALE_POOL", deductionPercent: 15.0, status: "ACTIVE" },
@@ -606,7 +606,7 @@ export class ConfigurationService {
   /**
    * Resolves the exact administrative deduction percentage.
    * Default: 15%
-   * Supports scheme-specific overrides (e.g. Suraksha Bima 10%/25%, Scheme X 20%).
+   * Supports scheme-specific overrides (e.g. Suraksha Bima 10%, Marriage 15%).
    */
   public async resolveAdministrativeDeduction(
     schemeCode?: string,
