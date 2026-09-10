@@ -46,8 +46,8 @@ export function formatSchemeThankYouMessage(params: SchemeThankYouParams): strin
  */
 export class WhatsAppService {
   private static apiUrl = process.env.GREEN_API_URL || "https://7107.api.greenapi.com";
-  private static idInstance = process.env.GREEN_API_ID_INSTANCE || "710722703877";
-  private static apiTokenInstance = process.env.GREEN_API_TOKEN_INSTANCE || "8155475884b747f7bab0529dc014374b6ad307fd15b241ad8a";
+  private static idInstance = process.env.GREEN_API_ID_INSTANCE || "710722725884";
+  private static apiTokenInstance = process.env.GREEN_API_TOKEN_INSTANCE || "7f309122957c4ddca5d6a5a2058fcd30fee6e6adafa9476eab";
 
 
   /**
