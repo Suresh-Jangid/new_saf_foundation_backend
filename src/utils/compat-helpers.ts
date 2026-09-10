@@ -125,6 +125,11 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
     added_mobile: app.added_mobile ?? addedBy.mobile ?? "",
     workerName: app.workerName ?? addedBy.name ?? "",
     workerMobile: app.workerMobile ?? addedBy.mobile ?? "",
+    workerCode: app.workerCode ?? addedBy.agentProfile?.employeeId ?? addedBy.employeeId ?? "",
+    karyakartaCode: app.karyakartaCode ?? addedBy.agentProfile?.employeeId ?? addedBy.employeeId ?? "",
+    seniorCode: app.seniorCode ?? "",
+    nomineeAadhar: app.nomineeAadhar ?? app.nomineeAadhaar ?? app.nominee_aadhar ?? "",
+    nomineeMobile: app.nomineeMobile ?? app.nomineePhone ?? app.nominee_mobile ?? "",
     addedby_id: app.addedById ?? app.addedby_id,
   };
 }

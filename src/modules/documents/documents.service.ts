@@ -12,11 +12,41 @@ export class DocumentsService {
   public async generateGeneralApplicationBond(id: string): Promise<{ buffer: Buffer; fileName: string }> {
     const app = await prisma.generalApplication.findFirst({
       where: { id, deletedAt: null },
-      include: { addedBy: true },
+      include: {
+        addedBy: {
+          include: {
+            agentProfile: true,
+          },
+        },
+        installments: {
+          where: { deletedAt: null },
+          orderBy: { date: "asc" },
+        },
+      },
     });
 
     if (!app) {
       throw new NotFoundError("General Application not found");
+    }
+
+    // Resolve Senior Code via agent hierarchies if karyakarta/addedBy is present
+    let seniorCode = (app as any).seniorCode || "";
+    if (!seniorCode && app.addedById) {
+      try {
+        const hierarchy: any[] = await prisma.$queryRawUnsafe(
+          `SELECT ap.employee_id
+           FROM agent_hierarchies ah
+           JOIN agent_profiles ap ON ap.user_id = ah.parent_agent_id
+           WHERE ah.agent_id = $1::uuid AND ap.deleted_at IS NULL
+           LIMIT 1`,
+          app.addedById
+        );
+        if (hierarchy && hierarchy.length > 0 && hierarchy[0].employee_id) {
+          seniorCode = hierarchy[0].employee_id;
+        }
+      } catch {
+        seniorCode = "";
+      }
     }
 
     const isFemale =
@@ -25,6 +55,30 @@ export class DocumentsService {
     const isMale =
       String(app.gender || "").toLowerCase() === "male" ||
       String(app.gender) === "पुरुष";
+
+    // Format authoritative fields with guaranteed safe fallbacks (never null/undefined)
+    const nomineeAadhar = (app as any).nomineeAadhar || (app as any).nomineeAadhaar || "";
+    const nomineeMobile = (app as any).nomineeMobile || (app as any).nomineePhone || "";
+    const karyakartaCode = app.addedBy?.agentProfile?.employeeId || (app as any).workerCode || "";
+    const totalAmount = app.totalAmount ? Number(app.totalAmount) : 0;
+    const amountStr = totalAmount > 0 ? `Rs. ${totalAmount.toLocaleString("en-IN")}` : "";
+
+    const firstInst = app.installments && app.installments.length > 0 ? app.installments[0] : null;
+    let paymentRef = "";
+    if (firstInst) {
+      const mode = String(firstInst.paymentMode || "").toUpperCase();
+      const note = (firstInst.note || "").trim();
+      const isInitialDefaultNote = note === "Registration Initial Payment";
+      if (mode === "CASH" || mode === "नकद") {
+        paymentRef = !isInitialDefaultNote && note ? `नकद / ${note}` : "नकद";
+      } else if (mode === "CHEQUE" || mode === "चेक") {
+        paymentRef = note && !isInitialDefaultNote ? `चेक नं. ${note}` : "चेक";
+      } else if (mode === "DD" || mode === "D.D.") {
+        paymentRef = note && !isInitialDefaultNote ? `D.D. नं. ${note}` : "D.D.";
+      } else {
+        paymentRef = note && !isInitialDefaultNote ? `UTR / Ref: ${note}` : (note || mode);
+      }
+    }
 
     // Candidate template paths (supporting gender-specific official Marriage Bond templates)
     const candidateTemplates = isFemale
@@ -63,11 +117,14 @@ export class DocumentsService {
         { text: app.address, x: 180, y: 465, size: 10 },
         { text: `${app.tehsil}, ${app.district}, ${app.state}`, x: 180, y: 435, size: 10 },
         { text: app.pinCode, x: 420, y: 435, size: 12 },
-        { text: app.nomineeName || "N/A", x: 180, y: 405, size: 12 },
-        { text: app.nomineeRelation || "N/A", x: 420, y: 405, size: 12 },
-        { text: `Rs. ${Number(app.totalAmount).toLocaleString("en-IN")}`, x: 180, y: 375, size: 12 },
-        { text: `Rs. ${Number(app.pendingAmount).toLocaleString("en-IN")}`, x: 420, y: 375, size: 12 },
-        { text: app.addedBy?.name || "N/A", x: 180, y: 345, size: 12 },
+        { text: app.nomineeName || "—", x: 180, y: 405, size: 12 },
+        { text: app.nomineeRelation || "—", x: 420, y: 405, size: 12 },
+        { text: nomineeAadhar || "—", x: 180, y: 375, size: 12 },
+        { text: nomineeMobile || "—", x: 420, y: 375, size: 12 },
+        { text: amountStr || "—", x: 180, y: 345, size: 12 },
+        { text: paymentRef || "—", x: 420, y: 345, size: 12 },
+        { text: karyakartaCode || app.addedBy?.name || "—", x: 180, y: 315, size: 12 },
+        { text: seniorCode || "—", x: 420, y: 315, size: 12 },
       ];
       const buffer = await this.generatePDFFromScratch("General Application Form", fallbackFields);
       return { buffer, fileName: `Marriage_Bond_${app.formNumber}.pdf` };

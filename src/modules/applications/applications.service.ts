@@ -435,7 +435,18 @@ export class ApplicationsService {
       where: { id, deletedAt: null },
       include: {
         addedBy: {
-          select: { id: true, name: true, mobile: true },
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            agentProfile: {
+              select: {
+                employeeId: true,
+                workArea: true,
+                designation: true,
+              },
+            },
+          },
         },
         installments: {
           orderBy: { date: "asc" },
