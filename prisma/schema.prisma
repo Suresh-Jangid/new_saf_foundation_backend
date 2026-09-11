@@ -115,6 +115,7 @@ model GeneralApplication {
   id               String                          @id @default(uuid()) @db.Uuid
   srNo             Int                             @unique @default(autoincrement()) @map("sr_no")
   formNumber       String                          @map("form_number") @db.VarChar(50)
+  offlineFormNumber String?                        @map("offline_form_number") @db.VarChar(50)
   applicationDate  DateTime                        @map("application_date") @db.Date
   applicantName    String                          @map("applicant_name") @db.VarChar(100)
   fatherName       String                          @map("father_name") @db.VarChar(100)
@@ -147,6 +148,7 @@ model GeneralApplication {
   @@index([mobile])
   @@index([aadharNumber])
   @@index([formNumber])
+  @@index([offlineFormNumber])
   @@index([gender])
   @@index([category])
   @@index([addedById])

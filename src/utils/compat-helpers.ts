@@ -106,6 +106,8 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
     paymentMode: lastInstallment?.paymentMode ?? null,
     paymentDate: lastInstallment?.date ?? null,
     form_number: app.formNumber ?? app.form_number,
+    offline_form_number: app.offlineFormNumber ?? app.offline_form_number ?? "",
+    offlineFormNumber: app.offlineFormNumber ?? app.offline_form_number ?? "",
     application_date: app.applicationDate ?? app.application_date,
     applicant_name: app.applicantName ?? app.applicant_name,
     father_name: app.fatherName ?? app.father_name,

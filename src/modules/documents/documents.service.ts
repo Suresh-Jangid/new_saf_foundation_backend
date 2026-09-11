@@ -103,8 +103,9 @@ export class DocumentsService {
 
     if (!templatePath || !fs.existsSync(templatePath)) {
       const fallbackFields: PDFTextField[] = [
-        { text: app.formNumber, x: 480, y: 735, size: 12 },
-        { text: app.applicationDate.toLocaleDateString("en-IN"), x: 480, y: 715, size: 10 },
+        { text: `आवेदन क्र.: ${app.formNumber}`, x: 480, y: 735, size: 12 },
+        { text: `ऑफलाइन फॉर्म नं.: ${app.offlineFormNumber || "—"}`, x: 480, y: 715, size: 10 },
+        { text: app.applicationDate.toLocaleDateString("en-IN"), x: 480, y: 695, size: 10 },
         { text: app.applicantName, x: 180, y: 645, size: 12 },
         { text: app.fatherName, x: 180, y: 615, size: 12 },
         { text: app.motherName, x: 180, y: 585, size: 12 },
@@ -246,10 +247,11 @@ export class DocumentsService {
       });
     };
 
-    // 1. Membership Number Box
-    drawTextAt(app.formNumber, 80, 126, 11, rgb(0, 0.15, 0.6));
+    // 1. Membership / Offline Form Number Box (left)
+    const membershipDisplay = app.offlineFormNumber || app.formNumber;
+    drawTextAt(membershipDisplay, 80, 126, 11, rgb(0, 0.15, 0.6));
 
-    // 2. Application Number Box
+    // 2. Application Number Box (right) - Always Authoritative System Serial (e.g. M-017)
     drawTextAt(app.formNumber, 388, 126, 11, rgb(0, 0.15, 0.6));
 
     // 3. Applicant Name
