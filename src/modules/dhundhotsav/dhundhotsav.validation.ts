@@ -37,10 +37,8 @@ export const createDhundhotsavSchema = z.object({
     selectedAgentId: z.string().optional().nullable(),
     paymentAmount: z
       .number()
-      .refine(
-        (val) => val === 300,
-        "Dhundhotsav installment payment amount must be exactly 300"
-      )
+      .nonnegative("Payment amount cannot be negative")
+      .max(5100, "Registration payment amount cannot exceed ₹5,100")
       .optional()
       .nullable(),
     paymentMode: z

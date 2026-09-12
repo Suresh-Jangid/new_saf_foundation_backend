@@ -157,9 +157,9 @@ export class DhundhotsavService {
     const paymentAmount = data.paymentAmount ? Number(data.paymentAmount) : 0;
 
     if (paymentAmount > 0) {
-      if (paymentAmount !== DHUNDHOTSAV_INSTALLMENT_AMOUNT) {
+      if (paymentAmount > DHUNDHOTSAV_MEMBERSHIP_FEE) {
         throw new BadRequestError(
-          `Initial installment payment amount must be exactly ₹${DHUNDHOTSAV_INSTALLMENT_AMOUNT}. Received: ₹${paymentAmount}`
+          `Registration payment amount cannot exceed ₹${DHUNDHOTSAV_MEMBERSHIP_FEE}. Received: ₹${paymentAmount}`
         );
       }
     }
@@ -200,20 +200,6 @@ export class DhundhotsavService {
           addedById: ownerId,
         },
       });
-
-      // If initial payment is made, record installment
-      if (paymentAmount > 0) {
-        await tx.dhundhotsavInstallment.create({
-          data: {
-            registrationId: registration.id,
-            amount: paymentAmount,
-            date: applicationDate,
-            paymentMode: normalizePaymentMode(data.paymentMode),
-            note: "Initial Registration Payment",
-            addedById: ownerId,
-          },
-        });
-      }
 
       // If E-PIN was provided, consume it atomically inside transaction
       if (rawPin) {
