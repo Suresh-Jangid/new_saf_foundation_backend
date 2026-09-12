@@ -93,6 +93,8 @@ export const createInsuranceApplicationSchema = z.object({
     state: z.string().min(2, "State is required"),
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
+    offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    offline_form_number: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]),
     category: z.enum(["A", "B", "C"]),
     totalAmount: z.preprocess((val) => Number(val), z.number().positive()),
@@ -101,6 +103,31 @@ export const createInsuranceApplicationSchema = z.object({
     paymentAmount: z.preprocess((val) => val ? Number(val) : 0, z.number().nonnegative()).optional(),
     paymentMode: z.enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"]).optional(),
     selectedAgentId: z.string().uuid("Agent selection is required"),
+  }),
+});
+
+// Update Insurance Application
+export const updateInsuranceApplicationSchema = z.object({
+  body: z.object({
+    applicantName: z.string().optional(),
+    fatherName: z.string().optional(),
+    wifeName: z.string().optional().nullable(),
+    motherName: z.string().optional(),
+    gotra: z.string().optional(),
+    mobile: mobilePhoneSchema.optional(),
+    address: z.string().optional(),
+    pinCode: z.string().optional(),
+    tehsil: z.string().optional(),
+    district: z.string().optional(),
+    state: z.string().optional(),
+    nomineeName: z.string().optional().nullable(),
+    nomineeRelation: z.string().optional().nullable(),
+    offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    offline_form_number: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    gender: z.enum(["Male", "Female", "Other"]).optional(),
+    category: z.enum(["A", "B", "C"]).optional(),
+    totalAmount: z.preprocess((val) => Number(val), z.number().positive()).optional(),
+    pendingAmount: z.preprocess((val) => Number(val), z.number().nonnegative()).optional(),
   }),
 });
 

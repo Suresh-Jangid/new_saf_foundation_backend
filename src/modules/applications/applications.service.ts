@@ -593,12 +593,37 @@ export class ApplicationsService {
       }
     }
 
+    const rawOfflineUpdate =
+      data.offlineFormNumber !== undefined ? data.offlineFormNumber : data.offline_form_number;
+    let newOfflineFormNumber: string | null | undefined = undefined;
+
+    if (rawOfflineUpdate !== undefined) {
+      const trimmedOffline =
+        rawOfflineUpdate !== null && String(rawOfflineUpdate).trim() !== ""
+          ? String(rawOfflineUpdate).trim()
+          : null;
+
+      if (trimmedOffline && trimmedOffline !== app.offlineFormNumber) {
+        const existingOffline = await prisma.insuranceApplication.findFirst({
+          where: { offlineFormNumber: trimmedOffline, deletedAt: null, id: { not: id } },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(
+            `Offline Form Number "${trimmedOffline}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+      newOfflineFormNumber = trimmedOffline;
+    }
+
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
     return prisma.insuranceApplication.update({
       where: { id },
       data: {
+        ...(newOfflineFormNumber !== undefined ? { offlineFormNumber: newOfflineFormNumber } : {}),
         applicationDate:
           data.applicationDate !== undefined
             ? parseRequiredDate(data.applicationDate, "applicationDate")
@@ -731,6 +756,12 @@ export class ApplicationsService {
 
     const aadharNumber = String(data.aadharNumber || "").replace(/\D/g, "");
 
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number;
+    const offlineFormNumber =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
+
     const rawPin = (data.epinCode || data.pinNumber || "").trim();
     const selectedAgentId = data.selectedAgentId || data.agentId || (actorRole === "AGENT" ? addedById : undefined);
 
@@ -748,6 +779,19 @@ export class ApplicationsService {
     const application = await prisma.$transaction(async (tx) => {
       await lockFormNumberSequence(tx, "insurance_application_form_number");
       await assertAadharAvailable(tx, aadharNumber);
+
+      // Duplicate detection for offlineFormNumber if provided
+      if (offlineFormNumber) {
+        const existingOffline = await tx.insuranceApplication.findFirst({
+          where: { offlineFormNumber, deletedAt: null },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(
+            `Offline Form Number "${offlineFormNumber}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
 
       // Continue the existing S-### sequence (legacy-imported data goes up to
       // S-491) rather than starting a separate INS-#### numbering scheme.
@@ -769,6 +813,7 @@ export class ApplicationsService {
       const application = await tx.insuranceApplication.create({
         data: {
           formNumber,
+          offlineFormNumber,
           applicationDate,
           applicantName: String(data.applicantName || "").trim(),
           fatherName: String(data.fatherName || "").trim(),
@@ -881,6 +926,7 @@ export class ApplicationsService {
         { mobile: { contains: f.search } },
         { aadharNumber: { contains: f.search } },
         { formNumber: { contains: f.search, mode: "insensitive" } },
+        { offlineFormNumber: { contains: f.search, mode: "insensitive" } },
       ];
     }
 
@@ -917,7 +963,7 @@ export class ApplicationsService {
       // getAllGeneralApplications above -- same lexicographic-vs-numeric bug.
       const candidates = await prisma.insuranceApplication.findMany({
         where: whereClause,
-        select: { id: true, formNumber: true, createdAt: true },
+        select: { id: true, formNumber: true, offlineFormNumber: true, createdAt: true },
       });
       const { data: records, total } = await paginateByFormNumberSeq(candidates, page, limit, (ids) =>
         prisma.insuranceApplication.findMany({ where: { id: { in: ids } }, include: includeOptions })

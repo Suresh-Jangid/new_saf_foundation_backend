@@ -220,6 +220,8 @@ export function mapInsuranceApplicationRecord(app: Record<string, any>) {
     ...app,
     form_number: app.formNumber ?? app.form_number,
     formNumber: app.formNumber ?? app.form_number,
+    offline_form_number: app.offlineFormNumber ?? app.offline_form_number ?? "",
+    offlineFormNumber: app.offlineFormNumber ?? app.offline_form_number ?? "",
     application_date: app.applicationDate ?? app.application_date,
     applicationDate: app.applicationDate ?? app.application_date,
     applicant_name: app.applicantName ?? app.applicant_name,
