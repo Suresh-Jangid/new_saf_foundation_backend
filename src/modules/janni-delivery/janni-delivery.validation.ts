@@ -53,8 +53,14 @@ export const createJanniDeliverySchema = z.object({
     paymentAmount: z.preprocess((val) => (val ? Number(val) : 0), z.number().nonnegative()).optional(),
     paymentMode: z.enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"]).optional().default("CASH"),
     selectedAgentId: z.string().uuid("Valid agent ID is required").optional(),
-    epinCode: z.string().optional().nullable(),
-    pinNumber: z.string().optional().nullable(),
+    epinCode: z.string().trim().optional().nullable(),
+    pinNumber: z.string().trim().optional().nullable(),
+  }).refine((data) => {
+    const pin = (data.epinCode || data.pinNumber || "").trim();
+    return pin.length > 0;
+  }, {
+    message: "E-PIN आवश्यक है / E-PIN is required for Janni Delivery Registration",
+    path: ["epinCode"],
   }),
 });
 

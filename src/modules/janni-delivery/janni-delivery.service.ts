@@ -100,25 +100,34 @@ export class JanniDeliveryService {
         ? data.selectedAgentId
         : addedById;
 
-    const rawPin = (data.epinCode || data.pinNumber || "").trim();
+    const rawPinCode = (data.epinCode || "").trim();
+    const rawPinNumber = (data.pinNumber || "").trim();
+    if (rawPinCode && rawPinNumber && rawPinCode !== rawPinNumber) {
+      throw new BadRequestError("Ambiguous E-PIN inputs provided (epinCode and pinNumber mismatch)");
+    }
+    const rawPin = rawPinCode || rawPinNumber;
+
+    if (!rawPin) {
+      throw new BadRequestError(
+        "E-PIN आवश्यक है / E-PIN is required for Janni Delivery Registration"
+      );
+    }
 
     const selectedAgentId =
       actor.role === "ADMIN" && data.selectedAgentId
         ? data.selectedAgentId
         : (actor.role === "AGENT" ? addedById : undefined);
 
-    // Validate E-PIN if supplied
-    if (rawPin) {
-      const validationResult = await epinsService.validateEPin(
-        { pinCode: rawPin, agentId: selectedAgentId },
-        actor
-      );
+    // Validate E-PIN (Mandatory)
+    const validationResult = await epinsService.validateEPin(
+      { pinCode: rawPin, agentId: selectedAgentId },
+      actor
+    );
 
-      if (!validationResult.valid) {
-        throw new BadRequestError(
-          `E-PIN Validation Failed: ${validationResult.message}`
-        );
-      }
+    if (!validationResult.valid) {
+      throw new BadRequestError(
+        `E-PIN Validation Failed: ${validationResult.message}`
+      );
     }
 
     const applicationDate = parseDateInput(data.applicationDate, "applicationDate");
@@ -165,7 +174,7 @@ export class JanniDeliveryService {
           category: normalizeCategory(data.category),
           totalAmount,
           pendingAmount,
-          epinCode: rawPin || null,
+          epinCode: rawPin,
           addedById: ownerId,
         },
       });
@@ -184,22 +193,20 @@ export class JanniDeliveryService {
         });
       }
 
-      // If E-PIN was provided, consume it atomically inside transaction
-      if (rawPin) {
-        await epinsService.consumeEPin(
-          {
-            pinCode: rawPin,
-            applicationId: registration.id,
-            applicantName: registration.applicantName,
-            module: "JANNI_DELIVERY",
-            agentId: selectedAgentId,
-            remarks: `Consumed for Janni Delivery Application ${registration.formNumber} (${registration.applicantName})`,
-            usedById: actor.userId,
-          },
-          actor,
-          tx
-        );
-      }
+      // Mandatory E-PIN consumption atomically inside transaction
+      await epinsService.consumeEPin(
+        {
+          pinCode: rawPin,
+          applicationId: registration.id,
+          applicantName: registration.applicantName,
+          module: "JANNI_DELIVERY",
+          agentId: selectedAgentId,
+          remarks: `Consumed for Janni Delivery Application ${registration.formNumber} (${registration.applicantName})`,
+          usedById: actor.userId,
+        },
+        actor,
+        tx
+      );
 
       // Send dynamic standardized WhatsApp thank-you message via Green API
       if (registration?.mobile) {
