@@ -36,6 +36,9 @@ export const createMayraRegistrationSchema = z.object({
     workerMobile: mobilePhoneSchema.optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]),
     
+    offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    offline_form_number: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    
     // Initial payment details
     paymentAmount: z.preprocess((val) => val ? Number(val) : 0, z.number().nonnegative()).optional(),
     paymentMode: z.enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"]).optional(),

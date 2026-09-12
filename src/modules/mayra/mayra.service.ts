@@ -68,11 +68,17 @@ export class MayraService {
    * Create new Mayra Registration & optional initial installment
    */
   public async createMayraRegistration(data: any, addedById: string, actorRole?: string) {
-    const rawPin = (data.epinCode || data.pinNumber || data.pinCode || "").trim();
+    const rawPin = (data.epinCode || data.pinNumber || "").trim();
     const selectedAgentId =
       actorRole !== "AGENT" && data.selectedAgentId && isValidUuid(String(data.selectedAgentId))
         ? String(data.selectedAgentId)
         : (actorRole === "AGENT" ? addedById : undefined);
+
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number;
+    const offlineFormNumber =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
 
     // Validate E-PIN if supplied
     if (rawPin) {
@@ -86,6 +92,19 @@ export class MayraService {
     }
 
     return prisma.$transaction(async (tx) => {
+      // Duplicate detection for offlineFormNumber if provided
+      if (offlineFormNumber) {
+        const existingOffline = await tx.mayraRegistration.findFirst({
+          where: { offlineFormNumber, deletedAt: null },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(
+            `Offline Form Number "${offlineFormNumber}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+
       const formNumber = await nextMayraFormNumber(tx);
 
       const applicationDate = parseRequiredDate(
@@ -120,6 +139,7 @@ export class MayraService {
       const registration = await tx.mayraRegistration.create({
         data: {
           formNumber,
+          offlineFormNumber,
           applicationDate,
           applicantName: data.applicantName,
           fatherName: data.fatherName,
@@ -239,6 +259,7 @@ export class MayraService {
         { mobile: { contains: f.search } },
         { aadharNumber: { contains: f.search } },
         { formNumber: { contains: f.search, mode: "insensitive" } },
+        { offlineFormNumber: { contains: f.search, mode: "insensitive" } },
       ];
     }
 
@@ -336,6 +357,30 @@ export class MayraService {
       }
     }
 
+    const rawOfflineUpdate =
+      data.offlineFormNumber !== undefined ? data.offlineFormNumber : data.offline_form_number;
+    let newOfflineFormNumber: string | null | undefined = undefined;
+
+    if (rawOfflineUpdate !== undefined) {
+      const trimmedOffline =
+        rawOfflineUpdate !== null && String(rawOfflineUpdate).trim() !== ""
+          ? String(rawOfflineUpdate).trim()
+          : null;
+
+      if (trimmedOffline && trimmedOffline !== reg.offlineFormNumber) {
+        const existingOffline = await prisma.mayraRegistration.findFirst({
+          where: { offlineFormNumber: trimmedOffline, deletedAt: null, id: { not: id } },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(
+            `Offline Form Number "${trimmedOffline}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+      newOfflineFormNumber = trimmedOffline;
+    }
+
     const nomineeFatherName =
       data.nomineeFatherName !== undefined
         ? data.nomineeFatherName
@@ -366,6 +411,7 @@ export class MayraService {
     return prisma.mayraRegistration.update({
       where: { id },
       data: {
+        ...(newOfflineFormNumber !== undefined ? { offlineFormNumber: newOfflineFormNumber } : {}),
         applicationDate:
           data.applicationDate !== undefined
             ? parseDateInput(data.applicationDate, "applicationDate")
