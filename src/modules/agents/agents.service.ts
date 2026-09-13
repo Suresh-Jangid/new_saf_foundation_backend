@@ -77,6 +77,59 @@ function buildAgentProfileExtras(data: Record<string, any>) {
   return extras;
 }
 
+function enrichAgentWithHierarchy(agent: any, h: any) {
+  const level = h?.level || "LEVEL_1";
+  const parentAgentId = h?.parentAgentId || null;
+  const parentEmployeeId = h?.parentEmployeeId || (level === "LEVEL_2" ? h?.seniorCode : null) || null;
+  const parentName = h?.parentName || (level === "LEVEL_2" ? h?.seniorName : null) || null;
+  const seniorCode = h?.seniorCode || "ADMIN";
+  const seniorName = h?.seniorName || "Super Admin";
+  const canCreateSubAgent = h?.canCreateSubAgent ?? (level === "LEVEL_1");
+
+  const hierarchy = {
+    level,
+    parentAgentId,
+    parentEmployeeId,
+    parentName,
+    seniorCode,
+    seniorName,
+    canCreateSubAgent,
+  };
+
+  const agentProfile = agent.agentProfile
+    ? {
+        ...agent.agentProfile,
+        parentAgentId,
+        parent_agent_id: parentAgentId,
+        seniorId: parentAgentId,
+        senior_id: parentAgentId,
+        seniorEmployeeId: parentEmployeeId,
+        senior_employee_id: parentEmployeeId,
+        seniorCode,
+        seniorName,
+        level,
+        hierarchy,
+      }
+    : agent.agentProfile;
+
+  return {
+    ...agent,
+    agentProfile,
+    level,
+    seniorCode,
+    seniorName,
+    parentAgentId,
+    parent_agent_id: parentAgentId,
+    seniorId: parentAgentId,
+    senior_id: parentAgentId,
+    seniorEmployeeId: parentEmployeeId,
+    senior_employee_id: parentEmployeeId,
+    parentEmployeeId,
+    parentName,
+    hierarchy,
+  };
+}
+
 export class AgentsService {
   /**
    * Resolves and validates senior selection for Agent Hierarchy.
@@ -349,23 +402,20 @@ export class AgentsService {
       const seniorCode = selectedSenior ? selectedSenior.employeeId : "ADMIN";
       const seniorName = selectedSenior ? selectedSenior.name : "Super Admin";
 
-      return {
+      const createdUser = {
         ...user,
         agentProfile: profile,
+      };
+
+      return enrichAgentWithHierarchy(createdUser, {
         level: targetLevel,
+        parentAgentId,
+        parentEmployeeId: selectedSenior ? selectedSenior.employeeId : null,
+        parentName: selectedSenior ? selectedSenior.name : null,
         seniorCode,
         seniorName,
-        parentAgentId,
-        hierarchy: {
-          level: targetLevel,
-          parentAgentId,
-          parentEmployeeId: selectedSenior ? selectedSenior.employeeId : null,
-          parentName: selectedSenior ? selectedSenior.name : null,
-          seniorCode,
-          seniorName,
-          canCreateSubAgent,
-        },
-      };
+        canCreateSubAgent,
+      });
     }, PRISMA_TX_OPTIONS);
   }
 
@@ -398,25 +448,7 @@ export class AgentsService {
     const agentIds = agents.map((a) => a.id);
     const hierarchyMap = await resolveAgentSeniorHierarchyBatch(agentIds);
 
-    return agents.map((agent) => {
-      const h = hierarchyMap.get(agent.id);
-      return {
-        ...agent,
-        level: h?.level || "LEVEL_1",
-        seniorCode: h?.seniorCode || "ADMIN",
-        seniorName: h?.seniorName || "Super Admin",
-        parentAgentId: h?.parentAgentId || null,
-        hierarchy: {
-          level: h?.level || "LEVEL_1",
-          parentAgentId: h?.parentAgentId || null,
-          parentEmployeeId: h?.parentEmployeeId || null,
-          parentName: h?.parentName || null,
-          seniorCode: h?.seniorCode || "ADMIN",
-          seniorName: h?.seniorName || "Super Admin",
-          canCreateSubAgent: h?.canCreateSubAgent ?? true,
-        },
-      };
-    });
+    return agents.map((agent) => enrichAgentWithHierarchy(agent, hierarchyMap.get(agent.id)));
   }
 
   /**
@@ -449,24 +481,7 @@ export class AgentsService {
     }
 
     const hierarchyMap = await resolveAgentSeniorHierarchyBatch([id]);
-    const h = hierarchyMap.get(id);
-
-    return {
-      ...user,
-      level: h?.level || "LEVEL_1",
-      seniorCode: h?.seniorCode || "ADMIN",
-      seniorName: h?.seniorName || "Super Admin",
-      parentAgentId: h?.parentAgentId || null,
-      hierarchy: {
-        level: h?.level || "LEVEL_1",
-        parentAgentId: h?.parentAgentId || null,
-        parentEmployeeId: h?.parentEmployeeId || null,
-        parentName: h?.parentName || null,
-        seniorCode: h?.seniorCode || "ADMIN",
-        seniorName: h?.seniorName || "Super Admin",
-        canCreateSubAgent: h?.canCreateSubAgent ?? true,
-      },
-    };
+    return enrichAgentWithHierarchy(user, hierarchyMap.get(id));
   }
 
   /**
@@ -614,24 +629,7 @@ export class AgentsService {
     });
 
     const hierarchyMap = await resolveAgentSeniorHierarchyBatch([id]);
-    const hierarchyInfo = hierarchyMap.get(id);
-
-    return {
-      ...updatedUser,
-      level: hierarchyInfo?.level || "LEVEL_1",
-      seniorCode: hierarchyInfo?.seniorCode || "ADMIN",
-      seniorName: hierarchyInfo?.seniorName || "Super Admin",
-      parentAgentId: hierarchyInfo?.parentAgentId || null,
-      hierarchy: {
-        level: hierarchyInfo?.level || "LEVEL_1",
-        parentAgentId: hierarchyInfo?.parentAgentId || null,
-        parentEmployeeId: hierarchyInfo?.parentEmployeeId || null,
-        parentName: hierarchyInfo?.parentName || null,
-        seniorCode: hierarchyInfo?.seniorCode || "ADMIN",
-        seniorName: hierarchyInfo?.seniorName || "Super Admin",
-        canCreateSubAgent: hierarchyInfo?.canCreateSubAgent ?? true,
-      },
-    };
+    return enrichAgentWithHierarchy(updatedUser, hierarchyMap.get(id));
   }
 
   /**
