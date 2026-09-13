@@ -9,7 +9,8 @@ export class AgentsController {
    */
   public async createAgent(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await agentsService.createAgent(req.body);
+      const creatorId = (req as any).user?.id || (req as any).user?.userId;
+      const result = await agentsService.createAgent(req.body, creatorId);
       res.status(201).json({
         success: true,
         message: "Agent registered successfully",
@@ -21,11 +22,29 @@ export class AgentsController {
   }
 
   /**
+   * Retrieve eligible Senior Agents for dropdown (LEVEL-1 only)
+   */
+  public async getEligibleSeniors(req: Request, res: Response, next: NextFunction) {
+    try {
+      const excludeId = (req.query.excludeId || req.query.exclude_id || req.query.id) as string | undefined;
+      const result = await agentsService.getEligibleSeniors(excludeId);
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Retrieve all agents
    */
-  public async getAllAgents(_req: Request, res: Response, next: NextFunction) {
+  public async getAllAgents(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await agentsService.getAllAgents();
+      const gender = req.query.gender as string | undefined;
+      const village = req.query.village as string | undefined;
+      const result = await agentsService.getAllAgents({ gender, village });
       res.status(200).json({
         success: true,
         data: result,
@@ -57,7 +76,8 @@ export class AgentsController {
   public async updateAgent(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const result = await agentsService.updateAgent(id, req.body);
+      const modifierId = (req as any).user?.id || (req as any).user?.userId;
+      const result = await agentsService.updateAgent(id, req.body, modifierId);
       res.status(200).json({
         success: true,
         message: "Agent profile updated successfully",

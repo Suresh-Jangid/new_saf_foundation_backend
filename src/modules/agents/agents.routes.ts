@@ -13,6 +13,10 @@ router.use(authenticate as any);
 // Retrieve all agents
 router.get("/", controller.getAllAgents.bind(controller));
 
+// Retrieve eligible Senior Agents for dropdown (LEVEL-1 only)
+router.get("/seniors/eligible", controller.getEligibleSeniors.bind(controller));
+router.get("/eligible-seniors", controller.getEligibleSeniors.bind(controller));
+
 // Retrieve single agent
 router.get("/:id", controller.getAgentById.bind(controller));
 

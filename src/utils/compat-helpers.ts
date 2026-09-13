@@ -97,6 +97,11 @@ import { prisma } from "../config/db";
 export interface ResolvedHierarchySenior {
   seniorCode: string;
   seniorName: string;
+  level?: "LEVEL_1" | "LEVEL_2";
+  parentAgentId?: string | null;
+  parentEmployeeId?: string | null;
+  parentName?: string | null;
+  canCreateSubAgent?: boolean;
 }
 
 /**
@@ -120,6 +125,8 @@ export async function resolveAgentSeniorHierarchyBatch(
       Array<{
         agent_id: string;
         parent_agent_id: string | null;
+        level: string | null;
+        can_create_sub_agent: boolean | null;
         parent_employee_id: string | null;
         parent_name: string | null;
         creator_name: string | null;
@@ -128,6 +135,8 @@ export async function resolveAgentSeniorHierarchyBatch(
       `SELECT 
          ah.agent_id,
          ah.parent_agent_id,
+         ah.level::text as level,
+         ah.can_create_sub_agent,
          parent_ap.employee_id AS parent_employee_id,
          parent_u.name AS parent_name,
          creator_u.name AS creator_name
@@ -145,12 +154,22 @@ export async function resolveAgentSeniorHierarchyBatch(
         map.set(row.agent_id, {
           seniorCode: row.parent_employee_id,
           seniorName: row.parent_name || "Senior Agent",
+          level: "LEVEL_2",
+          parentAgentId: row.parent_agent_id,
+          parentEmployeeId: row.parent_employee_id,
+          parentName: row.parent_name,
+          canCreateSubAgent: false,
         });
       } else {
         // Level-1 Agent: Reports to ADMIN
         map.set(row.agent_id, {
           seniorCode: "ADMIN",
           seniorName: row.creator_name || "Super Admin",
+          level: "LEVEL_1",
+          parentAgentId: null,
+          parentEmployeeId: null,
+          parentName: null,
+          canCreateSubAgent: row.can_create_sub_agent ?? true,
         });
       }
     }

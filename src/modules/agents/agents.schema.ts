@@ -11,6 +11,12 @@ export const createAgentSchema = z.object({
     email: z.string().email("Invalid email format").optional().nullable(),
     password: z.string().min(6, "Password must be at least 6 characters"),
     
+    // Hierarchy fields
+    seniorEmployeeId: z.string().optional().nullable(),
+    seniorId: z.string().optional().nullable(),
+    parentAgentId: z.string().optional().nullable(),
+    senior_employee_id: z.string().optional().nullable(),
+
     // Agent Profile fields
     employeeId: z.string().min(2, "Employee ID is required"),
     fatherName: z.string().min(2, "Father's name is required"),
@@ -29,8 +35,15 @@ export const createAgentSchema = z.object({
     nomineeMobile: z
       .string()
       .min(10, "Nominee mobile must be at least 10 digits")
+      .max(15, "Nominee mobile must not exceed 15 digits")
       .regex(/^\d+$/, "Nominee mobile must be digits only"),
     nomineeRelation: z.string().min(2, "Nominee relation is required"),
+    aadhaar: z.string().optional().nullable(),
+    designation: z.string().optional().nullable(),
+    profileImageUrl: z.string().optional().nullable(),
+    dateOfBirth: z.string().optional().nullable(),
+    dateOfJoining: z.string().optional().nullable(),
+    registrationDate: z.string().optional().nullable(),
   }),
 });
 
@@ -40,6 +53,12 @@ export const updateAgentSchema = z.object({
     email: z.string().email().optional().nullable(),
     password: z.string().min(6).optional(),
     
+    // Hierarchy updates
+    seniorEmployeeId: z.string().optional().nullable(),
+    seniorId: z.string().optional().nullable(),
+    parentAgentId: z.string().optional().nullable(),
+    senior_employee_id: z.string().optional().nullable(),
+
     // Optional profile updates
     fatherName: z.string().optional(),
     gotra: z.string().optional(),
@@ -56,6 +75,12 @@ export const updateAgentSchema = z.object({
     nomineeName: z.string().optional(),
     nomineeMobile: z.string().optional(),
     nomineeRelation: z.string().optional(),
+    aadhaar: z.string().optional().nullable(),
+    designation: z.string().optional().nullable(),
+    profileImageUrl: z.string().optional().nullable(),
+    dateOfBirth: z.string().optional().nullable(),
+    dateOfJoining: z.string().optional().nullable(),
+    registrationDate: z.string().optional().nullable(),
   }),
 });
 

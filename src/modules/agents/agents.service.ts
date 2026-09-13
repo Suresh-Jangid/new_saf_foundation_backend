@@ -4,6 +4,7 @@ import { BadRequestError, NotFoundError } from "../../utils/errors";
 import { Role, Gender } from "@prisma/client";
 import { parseOptionalDateInput } from "../../utils/parse-date";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
+import { resolveAgentSeniorHierarchyBatch, isValidUuid } from "../../utils/compat-helpers";
 
 function normalizeGender(value: unknown): Gender {
   const raw = String(value ?? "").trim();
@@ -78,9 +79,151 @@ function buildAgentProfileExtras(data: Record<string, any>) {
 
 export class AgentsService {
   /**
+   * Resolves and validates senior selection for Agent Hierarchy.
+   * Strict 2-Level Depth Rule:
+   * Level 1 = Senior Agent (reports to Admin, parent_agent_id is null)
+   * Level 2 = Sub-Agent (reports to Level 1 Senior)
+   * A Level-2 Agent can NEVER be a Senior and can NEVER have child agents.
+   */
+  private async resolveAndValidateSenior(
+    tx: any,
+    rawSenior: unknown,
+    currentAgentId?: string
+  ): Promise<{ id: string; employeeId: string; name: string } | null> {
+    if (rawSenior === undefined || rawSenior === null) {
+      return null;
+    }
+
+    const str = String(rawSenior).trim();
+    if (
+      !str ||
+      str.toLowerCase() === "null" ||
+      str.toLowerCase() === "undefined" ||
+      str.toUpperCase() === "ADMIN" ||
+      str.toUpperCase() === "DIRECT" ||
+      str.toUpperCase() === "NONE" ||
+      str === "0" ||
+      str === "-"
+    ) {
+      return null;
+    }
+
+    // Find Senior User in users table
+    let seniorUser: any = null;
+    if (isValidUuid(str)) {
+      seniorUser = await tx.user.findFirst({
+        where: { id: str, role: Role.AGENT, deletedAt: null },
+        include: { agentProfile: true },
+      });
+    }
+
+    if (!seniorUser) {
+      seniorUser = await tx.user.findFirst({
+        where: {
+          role: Role.AGENT,
+          deletedAt: null,
+          agentProfile: { employeeId: { equals: str, mode: "insensitive" }, deletedAt: null },
+        },
+        include: { agentProfile: true },
+      });
+    }
+
+    if (!seniorUser) {
+      seniorUser = await tx.user.findFirst({
+        where: { mobile: str, role: Role.AGENT, deletedAt: null },
+        include: { agentProfile: true },
+      });
+    }
+
+    if (!seniorUser) {
+      throw new BadRequestError("Selected Senior Agent was not found or is deleted.");
+    }
+
+    if (!seniorUser.isActive) {
+      throw new BadRequestError("Selected Senior Agent is inactive and cannot be assigned as a Senior.");
+    }
+
+    if (currentAgentId && seniorUser.id === currentAgentId) {
+      throw new BadRequestError("An agent cannot be assigned as their own Senior.");
+    }
+
+    // Check if the selected Senior is already a Level-2 Agent (Maximum Depth = 2 Rule)
+    const seniorHierarchy = (await tx.$queryRawUnsafe(
+      `SELECT level::text as level, parent_agent_id FROM agent_hierarchies WHERE agent_id = $1::uuid`,
+      seniorUser.id
+    )) as Array<{ level: string; parent_agent_id: string | null }>;
+
+    if (seniorHierarchy.length > 0) {
+      const sh = seniorHierarchy[0];
+      if (sh.level === "LEVEL_2" || sh.parent_agent_id !== null) {
+        throw new BadRequestError(
+          "केवल Senior Agent के नीचे Agent जोड़ा जा सकता है। Agent के नीचे दूसरा Agent नहीं जोड़ा जा सकता। (An agent can only be added under a Senior Agent. A Level-2 Agent cannot have another Agent under them.)"
+        );
+      }
+    }
+
+    return {
+      id: seniorUser.id,
+      employeeId: seniorUser.agentProfile?.employeeId || "",
+      name: seniorUser.name,
+    };
+  }
+
+  /**
+   * Retrieve list of eligible Level-1 Senior Agents for dropdown selection.
+   * Only active, non-deleted, LEVEL-1 agents (parent_agent_id = null) are returned.
+   */
+  public async getEligibleSeniors(excludeAgentId?: string) {
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        name: string;
+        mobile: string;
+        employee_id: string;
+        village: string;
+        district: string;
+        work_area: string;
+        father_name: string;
+      }>
+    >(
+      `SELECT 
+         u.id,
+         u.name,
+         u.mobile,
+         ap.employee_id,
+         ap.village,
+         ap.district,
+         ap.work_area,
+         ap.father_name
+       FROM users u
+       JOIN agent_profiles ap ON ap.user_id = u.id AND ap.deleted_at IS NULL
+       LEFT JOIN agent_hierarchies ah ON ah.agent_id = u.id
+       WHERE u.role = 'AGENT'
+         AND u.is_active = true
+         AND u.deleted_at IS NULL
+         AND (ah.id IS NULL OR (ah.level = 'LEVEL_1' AND ah.parent_agent_id IS NULL))
+         ${excludeAgentId && isValidUuid(excludeAgentId) ? `AND u.id != '${excludeAgentId}'::uuid` : ""}
+       ORDER BY u.name ASC`
+    );
+
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.id,
+      name: r.name,
+      employeeId: r.employee_id,
+      mobile: r.mobile,
+      level: "LEVEL_1" as const,
+      village: r.village,
+      district: r.district,
+      workArea: r.work_area,
+      fatherName: r.father_name,
+    }));
+  }
+
+  /**
    * Register a new Agent
    */
-  public async createAgent(data: any) {
+  public async createAgent(data: any, creatorId?: string) {
     if (!data.mobile || !data.password || !data.name || !data.fatherName || !data.gender) {
       throw new BadRequestError("Name, mobile, password, father name, and gender are required.");
     }
@@ -98,7 +241,18 @@ export class AgentsService {
 
     const age = Number(data.age) || 25;
 
+    const rawSenior =
+      data.seniorEmployeeId ??
+      data.senior_employee_id ??
+      data.seniorId ??
+      data.senior_id ??
+      data.parentAgentId ??
+      data.parent_agent_id;
+
     return prisma.$transaction(async (tx) => {
+      // Validate Senior Agent selection before creating
+      const selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior);
+
       let employeeId = data.employeeId || data.employee_id;
       if (!employeeId) {
         await lockFormNumberSequence(tx, "agent_employee_id");
@@ -117,7 +271,7 @@ export class AgentsService {
         },
       });
 
-      await tx.agentProfile.create({
+      const profile = await tx.agentProfile.create({
         data: {
           userId: user.id,
           employeeId,
@@ -168,10 +322,50 @@ export class AgentsService {
 
       await Promise.all(permissionPromises);
 
-      return tx.user.findFirst({
-        where: { id: user.id },
-        include: { agentProfile: true },
-      });
+      // Strict 2-Level Hierarchy Creation:
+      // If no Senior is selected -> LEVEL_1 (parent_agent_id = NULL, can_create_sub_agent = true)
+      // If Level-1 Senior is selected -> LEVEL_2 (parent_agent_id = Senior userId, can_create_sub_agent = false)
+      const targetLevel = selectedSenior ? "LEVEL_2" : "LEVEL_1";
+      const parentAgentId = selectedSenior ? selectedSenior.id : null;
+      const canCreateSubAgent = targetLevel === "LEVEL_1";
+
+      const resolvedCreatorId = creatorId && isValidUuid(creatorId) ? creatorId : user.id;
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO agent_hierarchies (id, agent_id, parent_agent_id, level, can_create_sub_agent, created_by_id, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::"AgentHierarchyLevel", $4, $5::uuid, NOW(), NOW())
+         ON CONFLICT (agent_id) DO UPDATE SET
+           parent_agent_id = EXCLUDED.parent_agent_id,
+           level = EXCLUDED.level,
+           can_create_sub_agent = EXCLUDED.can_create_sub_agent,
+           updated_at = NOW()`,
+        user.id,
+        parentAgentId,
+        targetLevel,
+        canCreateSubAgent,
+        resolvedCreatorId
+      );
+
+      const seniorCode = selectedSenior ? selectedSenior.employeeId : "ADMIN";
+      const seniorName = selectedSenior ? selectedSenior.name : "Super Admin";
+
+      return {
+        ...user,
+        agentProfile: profile,
+        level: targetLevel,
+        seniorCode,
+        seniorName,
+        parentAgentId,
+        hierarchy: {
+          level: targetLevel,
+          parentAgentId,
+          parentEmployeeId: selectedSenior ? selectedSenior.employeeId : null,
+          parentName: selectedSenior ? selectedSenior.name : null,
+          seniorCode,
+          seniorName,
+          canCreateSubAgent,
+        },
+      };
     }, PRISMA_TX_OPTIONS);
   }
 
@@ -187,7 +381,7 @@ export class AgentsService {
       profileWhere.village = filters.village;
     }
 
-    return prisma.user.findMany({
+    const agents = await prisma.user.findMany({
       where: {
         role: Role.AGENT,
         deletedAt: null,
@@ -199,6 +393,29 @@ export class AgentsService {
       orderBy: {
         createdAt: "desc",
       },
+    });
+
+    const agentIds = agents.map((a) => a.id);
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(agentIds);
+
+    return agents.map((agent) => {
+      const h = hierarchyMap.get(agent.id);
+      return {
+        ...agent,
+        level: h?.level || "LEVEL_1",
+        seniorCode: h?.seniorCode || "ADMIN",
+        seniorName: h?.seniorName || "Super Admin",
+        parentAgentId: h?.parentAgentId || null,
+        hierarchy: {
+          level: h?.level || "LEVEL_1",
+          parentAgentId: h?.parentAgentId || null,
+          parentEmployeeId: h?.parentEmployeeId || null,
+          parentName: h?.parentName || null,
+          seniorCode: h?.seniorCode || "ADMIN",
+          seniorName: h?.seniorName || "Super Admin",
+          canCreateSubAgent: h?.canCreateSubAgent ?? true,
+        },
+      };
     });
   }
 
@@ -231,13 +448,31 @@ export class AgentsService {
       user.agentProfile.registrationDate = registrationDate;
     }
 
-    return user;
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch([id]);
+    const h = hierarchyMap.get(id);
+
+    return {
+      ...user,
+      level: h?.level || "LEVEL_1",
+      seniorCode: h?.seniorCode || "ADMIN",
+      seniorName: h?.seniorName || "Super Admin",
+      parentAgentId: h?.parentAgentId || null,
+      hierarchy: {
+        level: h?.level || "LEVEL_1",
+        parentAgentId: h?.parentAgentId || null,
+        parentEmployeeId: h?.parentEmployeeId || null,
+        parentName: h?.parentName || null,
+        seniorCode: h?.seniorCode || "ADMIN",
+        seniorName: h?.seniorName || "Super Admin",
+        canCreateSubAgent: h?.canCreateSubAgent ?? true,
+      },
+    };
   }
 
   /**
-   * Update Agent Profile details
+   * Update Agent Profile details and Hierarchy
    */
-  public async updateAgent(id: string, data: any) {
+  public async updateAgent(id: string, data: any, modifierId?: string) {
     const user = await prisma.user.findFirst({
       where: { id, role: Role.AGENT, deletedAt: null },
       include: { agentProfile: true },
@@ -294,7 +529,45 @@ export class AgentsService {
       profileUpdates.gender = normalizeGender(data.gender);
     }
 
-    return prisma.$transaction(async (tx) => {
+    const hasSeniorUpdate =
+      data.seniorEmployeeId !== undefined ||
+      data.senior_employee_id !== undefined ||
+      data.seniorId !== undefined ||
+      data.senior_id !== undefined ||
+      data.parentAgentId !== undefined ||
+      data.parent_agent_id !== undefined;
+
+    const rawSenior =
+      data.seniorEmployeeId ??
+      data.senior_employee_id ??
+      data.seniorId ??
+      data.senior_id ??
+      data.parentAgentId ??
+      data.parent_agent_id;
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      let selectedSenior: { id: string; employeeId: string; name: string } | null = null;
+      let shouldUpdateHierarchy = false;
+
+      if (hasSeniorUpdate) {
+        shouldUpdateHierarchy = true;
+        selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior, id);
+
+        // If placing this agent under another agent (Level-2), verify they don't have sub-agents
+        if (selectedSenior) {
+          const childCountResult = (await tx.$queryRawUnsafe(
+            `SELECT count(*) as count FROM agent_hierarchies WHERE parent_agent_id = $1::uuid`,
+            id
+          )) as Array<{ count: bigint }>;
+          const childCount = Number(childCountResult[0]?.count || 0);
+          if (childCount > 0) {
+            throw new BadRequestError(
+              "A Level-1 Senior cannot be placed under another Agent because they already have sub-agents. This would violate the maximum depth rule of 2 levels."
+            );
+          }
+        }
+      }
+
       await tx.user.update({
         where: { id },
         data: {
@@ -312,11 +585,53 @@ export class AgentsService {
         });
       }
 
+      if (shouldUpdateHierarchy) {
+        const targetLevel = selectedSenior ? "LEVEL_2" : "LEVEL_1";
+        const parentAgentId = selectedSenior ? selectedSenior.id : null;
+        const canCreateSubAgent = targetLevel === "LEVEL_1";
+        const resolvedCreatorId = modifierId && isValidUuid(modifierId) ? modifierId : id;
+
+        await tx.$executeRawUnsafe(
+          `INSERT INTO agent_hierarchies (id, agent_id, parent_agent_id, level, can_create_sub_agent, created_by_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::"AgentHierarchyLevel", $4, $5::uuid, NOW(), NOW())
+           ON CONFLICT (agent_id) DO UPDATE SET
+             parent_agent_id = EXCLUDED.parent_agent_id,
+             level = EXCLUDED.level,
+             can_create_sub_agent = EXCLUDED.can_create_sub_agent,
+             updated_at = NOW()`,
+          id,
+          parentAgentId,
+          targetLevel,
+          canCreateSubAgent,
+          resolvedCreatorId
+        );
+      }
+
       return tx.user.findFirst({
         where: { id },
         include: { agentProfile: true },
       });
     });
+
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch([id]);
+    const hierarchyInfo = hierarchyMap.get(id);
+
+    return {
+      ...updatedUser,
+      level: hierarchyInfo?.level || "LEVEL_1",
+      seniorCode: hierarchyInfo?.seniorCode || "ADMIN",
+      seniorName: hierarchyInfo?.seniorName || "Super Admin",
+      parentAgentId: hierarchyInfo?.parentAgentId || null,
+      hierarchy: {
+        level: hierarchyInfo?.level || "LEVEL_1",
+        parentAgentId: hierarchyInfo?.parentAgentId || null,
+        parentEmployeeId: hierarchyInfo?.parentEmployeeId || null,
+        parentName: hierarchyInfo?.parentName || null,
+        seniorCode: hierarchyInfo?.seniorCode || "ADMIN",
+        seniorName: hierarchyInfo?.seniorName || "Super Admin",
+        canCreateSubAgent: hierarchyInfo?.canCreateSubAgent ?? true,
+      },
+    };
   }
 
   /**
