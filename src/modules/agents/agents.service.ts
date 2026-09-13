@@ -42,6 +42,11 @@ const AGENT_RECORD_CATEGORIES = [
 function buildAgentProfileExtras(data: Record<string, any>) {
   const extras: Record<string, any> = {};
 
+  const offlineFormNumber = data.offlineFormNumber ?? data.offline_form_number;
+  if (offlineFormNumber !== undefined && offlineFormNumber !== null && String(offlineFormNumber).trim() !== "") {
+    extras.offlineFormNumber = String(offlineFormNumber).trim();
+  }
+
   if (data.aadhaar !== undefined && data.aadhaar !== null && data.aadhaar !== "") {
     extras.aadhaar = data.aadhaar;
   }
@@ -96,9 +101,18 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
     canCreateSubAgent,
   };
 
+  const offlineFormNumber =
+    agent.agentProfile?.offlineFormNumber ??
+    agent.agentProfile?.offline_form_number ??
+    agent.offlineFormNumber ??
+    agent.offline_form_number ??
+    null;
+
   const agentProfile = agent.agentProfile
     ? {
         ...agent.agentProfile,
+        offlineFormNumber,
+        offline_form_number: offlineFormNumber,
         parentAgentId,
         parent_agent_id: parentAgentId,
         seniorId: parentAgentId,
@@ -115,6 +129,8 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
   return {
     ...agent,
     agentProfile,
+    offlineFormNumber,
+    offline_form_number: offlineFormNumber,
     level,
     seniorCode,
     seniorName,
@@ -302,9 +318,28 @@ export class AgentsService {
       data.parentAgentId ??
       data.parent_agent_id;
 
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number;
+    const cleanOffline =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
+
     return prisma.$transaction(async (tx) => {
       // Validate Senior Agent selection before creating
       const selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior);
+
+      // Duplicate check for offlineFormNumber among active non-deleted agents
+      if (cleanOffline) {
+        const existingOffline = await tx.agentProfile.findFirst({
+          where: {
+            offlineFormNumber: { equals: cleanOffline, mode: "insensitive" },
+            deletedAt: null,
+          },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(`Offline form number '${cleanOffline}' is already registered with another agent.`);
+        }
+      }
 
       let employeeId = data.employeeId || data.employee_id;
       if (!employeeId) {
@@ -422,7 +457,7 @@ export class AgentsService {
   /**
    * Retrieve all Active & Inactive Agents (ignoring soft deleted ones)
    */
-  public async getAllAgents(filters?: { gender?: string; village?: string }) {
+  public async getAllAgents(filters?: { gender?: string; village?: string; search?: string }) {
     const profileWhere: Record<string, any> = {};
     if (filters?.gender && filters.gender !== "all") {
       profileWhere.gender = normalizeGender(filters.gender);
@@ -431,12 +466,25 @@ export class AgentsService {
       profileWhere.village = filters.village;
     }
 
+    const where: Record<string, any> = {
+      role: Role.AGENT,
+      deletedAt: null,
+      ...(Object.keys(profileWhere).length > 0 ? { agentProfile: profileWhere } : {}),
+    };
+
+    if (filters?.search && filters.search.trim()) {
+      const q = filters.search.trim();
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { mobile: { contains: q } },
+        { agentProfile: { employeeId: { contains: q, mode: "insensitive" } } },
+        { agentProfile: { offlineFormNumber: { contains: q, mode: "insensitive" } } },
+        { agentProfile: { village: { contains: q, mode: "insensitive" } } },
+      ];
+    }
+
     const agents = await prisma.user.findMany({
-      where: {
-        role: Role.AGENT,
-        deletedAt: null,
-        ...(Object.keys(profileWhere).length > 0 ? { agentProfile: profileWhere } : {}),
-      },
+      where,
       include: {
         agentProfile: true,
       },
@@ -544,6 +592,22 @@ export class AgentsService {
       profileUpdates.gender = normalizeGender(data.gender);
     }
 
+    const rawOffline = data.offlineFormNumber !== undefined ? data.offlineFormNumber : data.offline_form_number;
+    let cleanOfflineForUpdate: string | null | undefined = undefined;
+    if (rawOffline !== undefined) {
+      if (rawOffline === null || String(rawOffline).trim() === "") {
+        cleanOfflineForUpdate = null;
+        profileUpdates.offlineFormNumber = null;
+      } else {
+        cleanOfflineForUpdate = String(rawOffline).trim();
+        profileUpdates.offlineFormNumber = cleanOfflineForUpdate;
+      }
+    }
+
+    // Ensure system employeeId is immutable and never overwritten
+    delete profileUpdates.employeeId;
+    delete profileUpdates.employee_id;
+
     const hasSeniorUpdate =
       data.seniorEmployeeId !== undefined ||
       data.senior_employee_id !== undefined ||
@@ -561,6 +625,20 @@ export class AgentsService {
       data.parent_agent_id;
 
     const updatedUser = await prisma.$transaction(async (tx) => {
+      // Duplicate check for offlineFormNumber if being updated
+      if (cleanOfflineForUpdate) {
+        const existingOffline = await tx.agentProfile.findFirst({
+          where: {
+            offlineFormNumber: { equals: cleanOfflineForUpdate, mode: "insensitive" },
+            deletedAt: null,
+            userId: { not: id },
+          },
+        });
+        if (existingOffline) {
+          throw new BadRequestError(`Offline form number '${cleanOfflineForUpdate}' is already registered with another agent.`);
+        }
+      }
+
       let selectedSenior: { id: string; employeeId: string; name: string } | null = null;
       let shouldUpdateHierarchy = false;
 

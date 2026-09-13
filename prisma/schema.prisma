@@ -61,37 +61,39 @@ model User {
 }
 
 model AgentProfile {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @unique @map("user_id") @db.Uuid
-  employeeId       String    @map("employee_id") @db.VarChar(50)
-  fatherName       String    @map("father_name") @db.VarChar(100)
-  gotra            String    @db.VarChar(50)
-  age              Int
-  gender           Gender
-  village          String    @db.VarChar(100)
-  address          String
-  tehsil           String    @db.VarChar(100)
-  district         String    @db.VarChar(100)
-  workArea         String    @map("work_area") @db.VarChar(255)
-  bankName         String    @map("bank_name") @db.VarChar(100)
-  accountNumber    String    @map("account_number") @db.VarChar(50)
-  ifscCode         String    @map("ifsc_code") @db.VarChar(20)
-  nomineeName      String    @map("nominee_name") @db.VarChar(100)
-  nomineeMobile    String    @map("nominee_mobile") @db.VarChar(15)
-  nomineeRelation  String    @map("nominee_relation") @db.VarChar(50)
-  aadhaar          String?   @db.VarChar(20)
-  designation      String?   @db.VarChar(100)
-  profileImageUrl  String?   @map("profile_image_url")
-  dateOfBirth      DateTime? @map("date_of_birth") @db.Date
-  dateOfJoining    DateTime? @map("date_of_joining") @db.Date
-  registrationDate DateTime? @map("registration_date") @db.Date
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  deletedAt        DateTime? @map("deleted_at")
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @unique @map("user_id") @db.Uuid
+  employeeId        String    @map("employee_id") @db.VarChar(50)
+  offlineFormNumber String?   @map("offline_form_number") @db.VarChar(50)
+  fatherName        String    @map("father_name") @db.VarChar(100)
+  gotra             String    @db.VarChar(50)
+  age               Int
+  gender            Gender
+  village           String    @db.VarChar(100)
+  address           String
+  tehsil            String    @db.VarChar(100)
+  district          String    @db.VarChar(100)
+  workArea          String    @map("work_area") @db.VarChar(255)
+  bankName          String    @map("bank_name") @db.VarChar(100)
+  accountNumber     String    @map("account_number") @db.VarChar(50)
+  ifscCode          String    @map("ifsc_code") @db.VarChar(20)
+  nomineeName       String    @map("nominee_name") @db.VarChar(100)
+  nomineeMobile     String    @map("nominee_mobile") @db.VarChar(15)
+  nomineeRelation   String    @map("nominee_relation") @db.VarChar(50)
+  aadhaar           String?   @db.VarChar(20)
+  designation       String?   @db.VarChar(100)
+  profileImageUrl   String?   @map("profile_image_url")
+  dateOfBirth       DateTime? @map("date_of_birth") @db.Date
+  dateOfJoining     DateTime? @map("date_of_joining") @db.Date
+  registrationDate  DateTime? @map("registration_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([gender])
   @@index([village])
+  @@index([offlineFormNumber])
   @@map("agent_profiles")
 }
 

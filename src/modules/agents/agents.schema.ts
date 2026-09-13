@@ -19,6 +19,8 @@ export const createAgentSchema = z.object({
 
     // Agent Profile fields
     employeeId: z.string().min(2, "Employee ID is required"),
+    offlineFormNumber: z.string().max(50, "Offline form number must not exceed 50 characters").optional().nullable(),
+    offline_form_number: z.string().max(50, "Offline form number must not exceed 50 characters").optional().nullable(),
     fatherName: z.string().min(2, "Father's name is required"),
     gotra: z.string().min(2, "Gotra is required"),
     age: z.preprocess((val) => Number(val), z.number().int().positive()),
@@ -60,6 +62,8 @@ export const updateAgentSchema = z.object({
     senior_employee_id: z.string().optional().nullable(),
 
     // Optional profile updates
+    offlineFormNumber: z.string().max(50, "Offline form number must not exceed 50 characters").optional().nullable(),
+    offline_form_number: z.string().max(50, "Offline form number must not exceed 50 characters").optional().nullable(),
     fatherName: z.string().optional(),
     gotra: z.string().optional(),
     age: z.preprocess((val) => Number(val), z.number().int().positive()).optional(),

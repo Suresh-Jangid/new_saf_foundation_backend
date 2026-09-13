@@ -44,7 +44,8 @@ export class AgentsController {
     try {
       const gender = req.query.gender as string | undefined;
       const village = req.query.village as string | undefined;
-      const result = await agentsService.getAllAgents({ gender, village });
+      const search = (req.query.search || req.query.q) as string | undefined;
+      const result = await agentsService.getAllAgents({ gender, village, search });
       res.status(200).json({
         success: true,
         data: result,

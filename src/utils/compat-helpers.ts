@@ -696,6 +696,8 @@ export function mapAgentRecord(record: Record<string, any>) {
         record.created_at,
     ),
     employee_id: profile.employeeId ?? profile.employee_id ?? record.employee_id ?? "",
+    offlineFormNumber: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
+    offline_form_number: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
     name: record.name ?? "",
     fatherName: profile.fatherName ?? profile.father_name ?? "",
     gotra: profile.gotra ?? "",
