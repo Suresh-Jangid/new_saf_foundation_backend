@@ -131,6 +131,8 @@ model GeneralApplication {
   state            String                          @db.VarChar(100)
   nomineeName      String?                         @map("nominee_name") @db.VarChar(100)
   nomineeRelation  String?                         @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile    String?                         @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar    String?                         @map("nominee_aadhar") @db.VarChar(12)
   affidavitUrl     String?                         @map("affidavit_url") @db.VarChar(512)
   passportPhotoUrl String?                         @map("passport_photo_url") @db.VarChar(512)
   gender           Gender

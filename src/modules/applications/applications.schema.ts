@@ -11,6 +11,26 @@ const aadharSchema = z
   .length(12, "Aadhaar must be exactly 12 digits")
   .regex(/^\d+$/, "Aadhaar must contain digits only");
 
+const optionalAadharSchema = z
+  .union([
+    z.string().trim().regex(/^\d{12}$/, "Nominee Aadhaar must be exactly 12 digits"),
+    z.literal(""),
+    z.null(),
+    z.undefined(),
+  ])
+  .optional()
+  .nullable();
+
+const optionalMobileSchema = z
+  .union([
+    z.string().trim().regex(/^\d{10,15}$/, "Nominee Mobile must be between 10 and 15 digits"),
+    z.literal(""),
+    z.null(),
+    z.undefined(),
+  ])
+  .optional()
+  .nullable();
+
 // General Application Creation Validation
 export const createGeneralApplicationSchema = z.object({
   body: z.object({
@@ -29,6 +49,12 @@ export const createGeneralApplicationSchema = z.object({
     state: z.string().min(2, "State is required"),
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
+    nomineeAadhar: optionalAadharSchema,
+    nomineeAadhaar: optionalAadharSchema,
+    nominee_aadhar: optionalAadharSchema,
+    nomineeMobile: optionalMobileSchema,
+    nomineePhone: optionalMobileSchema,
+    nominee_mobile: optionalMobileSchema,
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]),
     category: z.enum(["A", "B", "C"]),
@@ -56,6 +82,12 @@ export const updateGeneralApplicationSchema = z.object({
     state: z.string().optional(),
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
+    nomineeAadhar: optionalAadharSchema,
+    nomineeAadhaar: optionalAadharSchema,
+    nominee_aadhar: optionalAadharSchema,
+    nomineeMobile: optionalMobileSchema,
+    nomineePhone: optionalMobileSchema,
+    nominee_mobile: optionalMobileSchema,
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C"]).optional(),

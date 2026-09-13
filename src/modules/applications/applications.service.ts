@@ -259,6 +259,24 @@ export class ApplicationsService {
       state: String(data.state || "").trim(),
       nomineeName: data.nomineeName ? String(data.nomineeName).trim() : null,
       nomineeRelation: data.nomineeRelation ? String(data.nomineeRelation).trim() : null,
+      nomineeAadhar: (() => {
+        const raw = data.nomineeAadhar ?? data.nomineeAadhaar ?? data.nominee_aadhar;
+        if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+        const cleaned = String(raw).replace(/\D/g, "");
+        if (cleaned.length !== 12) {
+          throw new BadRequestError("Nominee Aadhaar must be exactly 12 digits");
+        }
+        return cleaned;
+      })(),
+      nomineeMobile: (() => {
+        const raw = data.nomineeMobile ?? data.nomineePhone ?? data.nominee_mobile;
+        if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+        const cleaned = String(raw).replace(/\D/g, "");
+        if (cleaned.length < 10 || cleaned.length > 15) {
+          throw new BadRequestError("Nominee Mobile must be between 10 and 15 digits");
+        }
+        return cleaned;
+      })(),
       affidavitUrl: saveImagePayload(data.affidavitUrl || data.affidavit || data.affidavit_url),
       passportPhotoUrl: saveImagePayload(data.passportPhotoUrl || data.passportPhoto || data.passport_photo || data.photo),
       gender: normalizeGender(data.gender),
@@ -528,10 +546,52 @@ export class ApplicationsService {
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
+    const rawNomineeAadharUpdate =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nomineeAadhaar !== undefined
+        ? data.nomineeAadhaar
+        : data.nominee_aadhar;
+
+    let newNomineeAadhar: string | null | undefined = undefined;
+    if (rawNomineeAadharUpdate !== undefined) {
+      if (rawNomineeAadharUpdate === null || String(rawNomineeAadharUpdate).trim() === "") {
+        newNomineeAadhar = null;
+      } else {
+        const cleaned = String(rawNomineeAadharUpdate).replace(/\D/g, "");
+        if (cleaned.length !== 12) {
+          throw new BadRequestError("Nominee Aadhaar must be exactly 12 digits");
+        }
+        newNomineeAadhar = cleaned;
+      }
+    }
+
+    const rawNomineeMobileUpdate =
+      data.nomineeMobile !== undefined
+        ? data.nomineeMobile
+        : data.nomineePhone !== undefined
+        ? data.nomineePhone
+        : data.nominee_mobile;
+
+    let newNomineeMobile: string | null | undefined = undefined;
+    if (rawNomineeMobileUpdate !== undefined) {
+      if (rawNomineeMobileUpdate === null || String(rawNomineeMobileUpdate).trim() === "") {
+        newNomineeMobile = null;
+      } else {
+        const cleaned = String(rawNomineeMobileUpdate).replace(/\D/g, "");
+        if (cleaned.length < 10 || cleaned.length > 15) {
+          throw new BadRequestError("Nominee Mobile must be between 10 and 15 digits");
+        }
+        newNomineeMobile = cleaned;
+      }
+    }
+
     return prisma.generalApplication.update({
       where: { id },
       data: {
         ...(newOfflineFormNumber !== undefined ? { offlineFormNumber: newOfflineFormNumber } : {}),
+        ...(newNomineeAadhar !== undefined ? { nomineeAadhar: newNomineeAadhar } : {}),
+        ...(newNomineeMobile !== undefined ? { nomineeMobile: newNomineeMobile } : {}),
         applicationDate:
           data.applicationDate !== undefined
             ? parseRequiredDate(data.applicationDate, "applicationDate")
@@ -1502,6 +1562,10 @@ export class ApplicationsService {
       const state = String(row['राज्य'] || '').trim();
       const nomineeName = row['नामिनी का नाम'] ? String(row['नामिनी का नाम']).trim() : null;
       const nomineeRelation = row['नामिनी का सम्बन्ध'] ? String(row['नामिनी का सम्बन्ध']).trim() : null;
+      const rawNomineeMobile = row['नामिनी का मोबाइल'] || row['नामिनी का मोबाइल नं'] || row['Nominee Mobile'] || row['nominee_mobile'];
+      const nomineeMobile = rawNomineeMobile ? String(rawNomineeMobile).trim().replace(/\D/g, '') : null;
+      const rawNomineeAadhar = row['नामिनी का आधार'] || row['नामिनी का आधार नं'] || row['Nominee Aadhar'] || row['nominee_aadhar'];
+      const nomineeAadhar = rawNomineeAadhar ? String(rawNomineeAadhar).trim().replace(/\D/g, '') : null;
 
       const gender = mapImportGender(row['लिंग']);
       const category = mapImportCategory(row['श्रेणी']);
@@ -1545,6 +1609,8 @@ export class ApplicationsService {
         state: validateAndClamp(idx, 'state', state, 100),
         nomineeName: validateAndClamp(idx, 'nomineeName', nomineeName, 100),
         nomineeRelation: validateAndClamp(idx, 'nomineeRelation', nomineeRelation, 50),
+        nomineeMobile: nomineeMobile ? validateAndClamp(idx, 'nomineeMobile', nomineeMobile, 15) : null,
+        nomineeAadhar: nomineeAadhar ? validateAndClamp(idx, 'nomineeAadhar', nomineeAadhar, 12) : null,
         gender,
         category,
         totalAmount,
