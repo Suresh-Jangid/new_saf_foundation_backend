@@ -92,6 +92,75 @@ function latestInstallment(installments: unknown): Record<string, any> | undefin
   );
 }
 
+import { prisma } from "../config/db";
+
+export interface ResolvedHierarchySenior {
+  seniorCode: string;
+  seniorName: string;
+}
+
+/**
+ * Efficiently batch-resolves senior hierarchy for a list of agent user IDs.
+ * Rules:
+ * - Level 1 Agent (parent_agent_id is null): reports to ADMIN (Code: 'ADMIN', Name: creator admin or 'Super Admin')
+ * - Level 2 Agent (parent_agent_id present): reports to Senior Agent (Code: parent employeeId, Name: parent name)
+ * - Admin (role ADMIN): Code: 'ADMIN', Name: user.name or 'Super Admin'
+ */
+export async function resolveAgentSeniorHierarchyBatch(
+  agentUserIds: string[]
+): Promise<Map<string, ResolvedHierarchySenior>> {
+  const map = new Map<string, ResolvedHierarchySenior>();
+  if (!agentUserIds || agentUserIds.length === 0) return map;
+
+  const validIds = [...new Set(agentUserIds.filter(isValidUuid))];
+  if (validIds.length === 0) return map;
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        agent_id: string;
+        parent_agent_id: string | null;
+        parent_employee_id: string | null;
+        parent_name: string | null;
+        creator_name: string | null;
+      }>
+    >(
+      `SELECT 
+         ah.agent_id,
+         ah.parent_agent_id,
+         parent_ap.employee_id AS parent_employee_id,
+         parent_u.name AS parent_name,
+         creator_u.name AS creator_name
+       FROM agent_hierarchies ah
+       LEFT JOIN users parent_u ON parent_u.id = ah.parent_agent_id AND parent_u.deleted_at IS NULL
+       LEFT JOIN agent_profiles parent_ap ON parent_ap.user_id = ah.parent_agent_id AND parent_ap.deleted_at IS NULL
+       LEFT JOIN users creator_u ON creator_u.id = ah.created_by_id AND creator_u.deleted_at IS NULL
+       WHERE ah.agent_id = ANY($1::uuid[])`,
+      validIds
+    );
+
+    for (const row of rows) {
+      if (row.parent_agent_id && row.parent_employee_id) {
+        // Level-2 Sub-Agent: Reports to Parent Senior Agent
+        map.set(row.agent_id, {
+          seniorCode: row.parent_employee_id,
+          seniorName: row.parent_name || "Senior Agent",
+        });
+      } else {
+        // Level-1 Agent: Reports to ADMIN
+        map.set(row.agent_id, {
+          seniorCode: "ADMIN",
+          seniorName: row.creator_name || "Super Admin",
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Error resolving agent hierarchies batch:", err);
+  }
+
+  return map;
+}
+
 /** Map Prisma general application rows to legacy PHP field names expected by the admin UI. */
 export function mapGeneralApplicationRecord(app: Record<string, any>) {
   const addedBy = app.addedBy || {};
@@ -99,6 +168,28 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
   const totalAmount = app.totalAmount !== undefined && app.totalAmount !== null ? Number(app.totalAmount) : null;
   const pendingAmount = app.pendingAmount !== undefined && app.pendingAmount !== null ? Number(app.pendingAmount) : null;
   const lastInstallment = latestInstallment(app.installments);
+
+  // Derive canonical Worker & Senior Codes / Names
+  const isAdmin = addedBy.role === "ADMIN" || app.addedByRole === "ADMIN";
+  const agentEmployeeId = addedBy.agentProfile?.employeeId || addedBy.employeeId || "";
+
+  // Worker code: sanitize so a UUID is NEVER used as code
+  let rawWorkerCode = app.workerCode || app.karyakartaCode || (isAdmin ? "ADMIN" : agentEmployeeId);
+  if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+    rawWorkerCode = isAdmin ? "ADMIN" : agentEmployeeId || "";
+  }
+  const workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const karyakartaCode = workerCode;
+  const workerName = app.workerName || app.karyakartaName || app.added_name || addedBy.name || (isAdmin ? "Super Admin" : "Super Admin");
+  const karyakartaName = workerName;
+
+  // Senior code & name: sanitize so a UUID is NEVER used
+  let rawSeniorCode = app.seniorCode;
+  if (!rawSeniorCode || isValidUuid(rawSeniorCode)) {
+    rawSeniorCode = "";
+  }
+  const seniorCode = rawSeniorCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const seniorName = app.seniorName || (isAdmin ? (addedBy.name || "Super Admin") : "Super Admin");
 
   return {
     ...app,
@@ -123,13 +214,15 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
     age: app.age ?? calculateAgeFromDateOfBirth(app.dateOfBirth ?? app.date_of_birth),
     is_active: isActive ? 1 : 0,
     isActive,
-    added_name: app.added_name ?? addedBy.name ?? "",
+    added_name: workerName,
     added_mobile: app.added_mobile ?? addedBy.mobile ?? "",
-    workerName: app.workerName ?? addedBy.name ?? "",
+    workerName,
+    karyakartaName,
     workerMobile: app.workerMobile ?? addedBy.mobile ?? "",
-    workerCode: app.workerCode ?? addedBy.agentProfile?.employeeId ?? addedBy.employeeId ?? "",
-    karyakartaCode: app.karyakartaCode ?? addedBy.agentProfile?.employeeId ?? addedBy.employeeId ?? "",
-    seniorCode: app.seniorCode ?? "",
+    workerCode,
+    karyakartaCode,
+    seniorCode,
+    seniorName,
     nomineeAadhar: app.nomineeAadhar ?? app.nomineeAadhaar ?? app.nominee_aadhar ?? "",
     nomineeMobile: app.nomineeMobile ?? app.nomineePhone ?? app.nominee_mobile ?? "",
     addedby_id: app.addedById ?? app.addedby_id,

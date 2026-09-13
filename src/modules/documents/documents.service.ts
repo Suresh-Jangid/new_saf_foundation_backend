@@ -4,6 +4,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "../../config/db";
 import { NotFoundError } from "../../utils/errors";
 import { PDFHelper, PDFTextField, drawDevanagariText } from "../../utils/pdf";
+import { isValidUuid } from "../../utils/compat-helpers";
 
 export class DocumentsService {
   /**
@@ -31,21 +32,34 @@ export class DocumentsService {
 
     // Resolve Senior Code via agent hierarchies if karyakarta/addedBy is present
     let seniorCode = (app as any).seniorCode || "";
-    if (!seniorCode && app.addedById) {
-      try {
-        const hierarchy: any[] = await prisma.$queryRawUnsafe(
-          `SELECT ap.employee_id
-           FROM agent_hierarchies ah
-           JOIN agent_profiles ap ON ap.user_id = ah.parent_agent_id
-           WHERE ah.agent_id = $1::uuid AND ap.deleted_at IS NULL
-           LIMIT 1`,
-          app.addedById
-        );
-        if (hierarchy && hierarchy.length > 0 && hierarchy[0].employee_id) {
-          seniorCode = hierarchy[0].employee_id;
+    if (seniorCode && (isValidUuid(seniorCode) || seniorCode === "—")) {
+      seniorCode = "";
+    }
+    if (!seniorCode) {
+      if (app.addedBy?.role === "ADMIN") {
+        seniorCode = "ADMIN";
+      } else if (app.addedById) {
+        try {
+          const hierarchy: any[] = await prisma.$queryRawUnsafe(
+            `SELECT 
+               ah.parent_agent_id,
+               parent_ap.employee_id AS parent_employee_id
+             FROM agent_hierarchies ah
+             LEFT JOIN agent_profiles parent_ap ON parent_ap.user_id = ah.parent_agent_id AND parent_ap.deleted_at IS NULL
+             WHERE ah.agent_id = $1::uuid
+             LIMIT 1`,
+            app.addedById
+          );
+          if (hierarchy && hierarchy.length > 0 && hierarchy[0].parent_agent_id && hierarchy[0].parent_employee_id) {
+            seniorCode = hierarchy[0].parent_employee_id;
+          } else {
+            seniorCode = "ADMIN";
+          }
+        } catch {
+          seniorCode = "ADMIN";
         }
-      } catch {
-        seniorCode = "";
+      } else {
+        seniorCode = "ADMIN";
       }
     }
 
@@ -56,10 +70,14 @@ export class DocumentsService {
       String(app.gender || "").toLowerCase() === "male" ||
       String(app.gender) === "पुरुष";
 
-    // Format authoritative fields with guaranteed safe fallbacks (never null/undefined)
+    // Format authoritative fields with guaranteed safe fallbacks (never null/undefined, never UUID)
     const nomineeAadhar = (app as any).nomineeAadhar || (app as any).nomineeAadhaar || "";
     const nomineeMobile = (app as any).nomineeMobile || (app as any).nomineePhone || "";
-    const karyakartaCode = app.addedBy?.agentProfile?.employeeId || (app as any).workerCode || "";
+    let rawKaryakarta = app.addedBy?.agentProfile?.employeeId || (app as any).workerCode || (app as any).karyakartaCode || "";
+    if (isValidUuid(rawKaryakarta)) {
+      rawKaryakarta = "";
+    }
+    const karyakartaCode = rawKaryakarta || (app.addedBy?.role === "ADMIN" ? "ADMIN" : "ADMIN");
     const totalAmount = app.totalAmount ? Number(app.totalAmount) : 0;
     const amountStr = totalAmount > 0 ? `Rs. ${totalAmount.toLocaleString("en-IN")}` : "";
 

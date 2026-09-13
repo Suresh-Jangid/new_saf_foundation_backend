@@ -1,7 +1,7 @@
 import { prisma, PRISMA_TX_OPTIONS, type PrismaTransactionClient } from "../../config/db";
 import { NotFoundError, BadRequestError } from "../../utils/errors";
 import { ApplicationCategory, Gender, PaymentMode, Role } from "@prisma/client";
-import { isValidUuid } from "../../utils/compat-helpers";
+import { isValidUuid, resolveAgentSeniorHierarchyBatch } from "../../utils/compat-helpers";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import {
@@ -443,7 +443,19 @@ export class ApplicationsService {
     const limit = f.limit;
     const includeOptions = {
       addedBy: {
-        select: { id: true, name: true, mobile: true },
+        select: {
+          id: true,
+          name: true,
+          mobile: true,
+          role: true,
+          agentProfile: {
+            select: {
+              employeeId: true,
+              workArea: true,
+              designation: true,
+            },
+          },
+        },
       },
     };
 
@@ -459,6 +471,27 @@ export class ApplicationsService {
       prisma.generalApplication.findMany({ where: { id: { in: ids } }, include: includeOptions })
     );
     await attachLatestInstallments(records);
+
+    // Batch resolve senior hierarchy for all applications to eliminate N+1 queries
+    const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
+    for (const r of records as any[]) {
+      const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
+      if (hierarchy) {
+        r.seniorCode = hierarchy.seniorCode;
+        r.seniorName = hierarchy.seniorName;
+      } else if (r.addedBy?.role === "ADMIN") {
+        r.seniorCode = "ADMIN";
+        r.seniorName = r.addedBy.name || "Super Admin";
+      } else {
+        r.seniorCode = "ADMIN";
+        r.seniorName = "Super Admin";
+      }
+      r.workerCode = r.addedBy?.role === "ADMIN" ? "ADMIN" : (r.addedBy?.agentProfile?.employeeId || "ADMIN");
+      r.workerName = r.addedBy?.name || (r.addedBy?.role === "ADMIN" ? "Super Admin" : "");
+      r.karyakartaCode = r.workerCode;
+      r.karyakartaName = r.workerName;
+    }
 
     if (page !== undefined && limit !== undefined) {
       return { data: records, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -478,6 +511,7 @@ export class ApplicationsService {
             id: true,
             name: true,
             mobile: true,
+            role: true,
             agentProfile: {
               select: {
                 employeeId: true,
@@ -497,7 +531,25 @@ export class ApplicationsService {
       throw new NotFoundError("General Application not found");
     }
 
-    return app;
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(app.addedById ? [app.addedById] : []);
+    const hierarchy = app.addedById ? hierarchyMap.get(app.addedById) : null;
+    const appObj: any = app;
+    if (hierarchy) {
+      appObj.seniorCode = hierarchy.seniorCode;
+      appObj.seniorName = hierarchy.seniorName;
+    } else if (app.addedBy?.role === "ADMIN") {
+      appObj.seniorCode = "ADMIN";
+      appObj.seniorName = app.addedBy.name || "Super Admin";
+    } else {
+      appObj.seniorCode = "ADMIN";
+      appObj.seniorName = "Super Admin";
+    }
+    appObj.workerCode = app.addedBy?.role === "ADMIN" ? "ADMIN" : (app.addedBy?.agentProfile?.employeeId || "ADMIN");
+    appObj.workerName = app.addedBy?.name || (app.addedBy?.role === "ADMIN" ? "Super Admin" : "");
+    appObj.karyakartaCode = appObj.workerCode;
+    appObj.karyakartaName = appObj.workerName;
+
+    return appObj;
   }
 
   /**
