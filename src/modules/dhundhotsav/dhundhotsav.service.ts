@@ -123,6 +123,29 @@ export class DhundhotsavService {
       );
     }
 
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number ?? data.offlineFormNo;
+    const offlineFormNumber =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
+
+    // Duplicate detection for offlineFormNumber if provided
+    if (offlineFormNumber) {
+      const existingOffline = await prisma.dhundhotsavRegistration.findFirst({
+        where: {
+          offlineFormNumber,
+          deletedAt: null,
+        },
+        select: { id: true, formNumber: true, applicantName: true },
+      });
+
+      if (existingOffline) {
+        throw new ConflictError(
+          `Offline Form Number "${offlineFormNumber}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+        );
+      }
+    }
+
     // Resolve owner agent ID
     const ownerId =
       actor.role === "ADMIN" && data.selectedAgentId
@@ -170,6 +193,7 @@ export class DhundhotsavService {
       const registration = await tx.dhundhotsavRegistration.create({
         data: {
           formNumber,
+          offlineFormNumber,
           applicationDate,
           applicantName: String(data.applicantName).trim(),
           fatherName: String(data.fatherName).trim(),
@@ -266,6 +290,7 @@ export class DhundhotsavService {
         { fatherName: { contains: search, mode: "insensitive" } },
         { husbandName: { contains: search, mode: "insensitive" } },
         { formNumber: { contains: search, mode: "insensitive" } },
+        { offlineFormNumber: { contains: search, mode: "insensitive" } },
         { aadharNumber: { contains: search } },
         { mobile: { contains: search } },
         { gotra: { contains: search, mode: "insensitive" } },
@@ -328,6 +353,9 @@ export class DhundhotsavService {
       const financialSummary = computeDhundhotsavFinancialSummary(rec.installments);
       return {
         ...rec,
+        offlineFormNumber: rec.offlineFormNumber ?? null,
+        offline_form_number: rec.offlineFormNumber ?? null,
+        offlineFormNo: rec.offlineFormNumber ?? null,
         membershipFee: Number(rec.membershipFee),
         installments: rec.installments.map((inst) => ({
           ...inst,
@@ -401,6 +429,9 @@ export class DhundhotsavService {
       success: true,
       data: {
         ...record,
+        offlineFormNumber: record.offlineFormNumber ?? null,
+        offline_form_number: record.offlineFormNumber ?? null,
+        offlineFormNo: record.offlineFormNumber ?? null,
         membershipFee: Number(record.membershipFee),
         installments: record.installments.map((inst) => ({
           ...inst,
@@ -431,7 +462,45 @@ export class DhundhotsavService {
       throw new ForbiddenError("Access Denied: You do not have permission to update this application");
     }
 
+    const rawOfflineUpdate =
+      data.offlineFormNumber !== undefined
+        ? data.offlineFormNumber
+        : data.offline_form_number !== undefined
+        ? data.offline_form_number
+        : data.offlineFormNo;
+
+    let newOfflineFormNumber: string | null | undefined = undefined;
+
+    if (rawOfflineUpdate !== undefined) {
+      const trimmedOffline =
+        rawOfflineUpdate !== null && String(rawOfflineUpdate).trim() !== ""
+          ? String(rawOfflineUpdate).trim()
+          : null;
+
+      if (trimmedOffline && trimmedOffline !== record.offlineFormNumber) {
+        const existingOffline = await prisma.dhundhotsavRegistration.findFirst({
+          where: {
+            offlineFormNumber: trimmedOffline,
+            deletedAt: null,
+            id: { not: id },
+          },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+
+        if (existingOffline) {
+          throw new ConflictError(
+            `Offline Form Number "${trimmedOffline}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+      newOfflineFormNumber = trimmedOffline;
+    }
+
     const updateData: Prisma.DhundhotsavRegistrationUpdateInput = {};
+
+    if (newOfflineFormNumber !== undefined) {
+      updateData.offlineFormNumber = newOfflineFormNumber;
+    }
 
     if (data.applicantName !== undefined) updateData.applicantName = String(data.applicantName).trim();
     if (data.fatherName !== undefined) updateData.fatherName = String(data.fatherName).trim();
@@ -482,6 +551,9 @@ export class DhundhotsavService {
       message: "Dhundhotsav registration updated successfully",
       data: {
         ...updated,
+        offlineFormNumber: updated.offlineFormNumber ?? null,
+        offline_form_number: updated.offlineFormNumber ?? null,
+        offlineFormNo: updated.offlineFormNumber ?? null,
         membershipFee: Number(updated.membershipFee),
         installments: updated.installments.map((inst) => ({
           ...inst,

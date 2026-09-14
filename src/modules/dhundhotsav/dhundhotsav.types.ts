@@ -39,6 +39,9 @@ export interface CreateDhundhotsavInput {
   selectedAgentId?: string | null;
   paymentAmount?: number | null;
   paymentMode?: PaymentMode | string;
+  offlineFormNumber?: string | null;
+  offline_form_number?: string | null;
+  offlineFormNo?: string | null;
 }
 
 export interface UpdateDhundhotsavInput {
@@ -63,6 +66,9 @@ export interface UpdateDhundhotsavInput {
   affidavitUrl?: string | null;
   gender?: Gender | string;
   category?: ApplicationCategory | string;
+  offlineFormNumber?: string | null;
+  offline_form_number?: string | null;
+  offlineFormNo?: string | null;
 }
 
 export interface DhundhotsavFilter {
@@ -98,6 +104,9 @@ export interface DhundhotsavDetailResponse {
   id: string;
   srNo: number;
   formNumber: string;
+  offlineFormNumber: string | null;
+  offline_form_number?: string | null;
+  offlineFormNo?: string | null;
   applicationDate: Date;
   applicantName: string;
   fatherName: string;

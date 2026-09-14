@@ -114,40 +114,40 @@ model AgentPermission {
 }
 
 model GeneralApplication {
-  id               String                          @id @default(uuid()) @db.Uuid
-  srNo             Int                             @unique @default(autoincrement()) @map("sr_no")
-  formNumber       String                          @map("form_number") @db.VarChar(50)
-  offlineFormNumber String?                        @map("offline_form_number") @db.VarChar(50)
-  applicationDate  DateTime                        @map("application_date") @db.Date
-  applicantName    String                          @map("applicant_name") @db.VarChar(100)
-  fatherName       String                          @map("father_name") @db.VarChar(100)
-  motherName       String                          @map("mother_name") @db.VarChar(100)
-  dateOfBirth      DateTime                        @map("date_of_birth") @db.Date
-  aadharNumber     String                          @map("aadhar_number") @db.VarChar(12)
-  gotra            String                          @db.VarChar(50)
-  mobile           String                          @db.VarChar(15)
-  address          String
-  pinCode          String                          @map("pin_code") @db.VarChar(10)
-  tehsil           String                          @db.VarChar(100)
-  district         String                          @db.VarChar(100)
-  state            String                          @db.VarChar(100)
-  nomineeName      String?                         @map("nominee_name") @db.VarChar(100)
-  nomineeRelation  String?                         @map("nominee_relation") @db.VarChar(50)
-  nomineeMobile    String?                         @map("nominee_mobile") @db.VarChar(15)
-  nomineeAadhar    String?                         @map("nominee_aadhar") @db.VarChar(12)
-  affidavitUrl     String?                         @map("affidavit_url") @db.VarChar(512)
-  passportPhotoUrl String?                         @map("passport_photo_url") @db.VarChar(512)
-  gender           Gender
-  category         ApplicationCategory
-  totalAmount      Decimal                         @map("total_amount") @db.Decimal(10, 2)
-  pendingAmount    Decimal                         @map("pending_amount") @db.Decimal(10, 2)
-  isActive         Boolean                         @default(true) @map("is_active")
-  addedById        String                          @map("added_by_id") @db.Uuid
-  createdAt        DateTime                        @default(now()) @map("created_at")
-  updatedAt        DateTime                        @updatedAt @map("updated_at")
-  deletedAt        DateTime?                       @map("deleted_at")
-  installments     GeneralApplicationInstallment[]
-  addedBy          User                            @relation("AddedByGeneral", fields: [addedById], references: [id])
+  id                String                          @id @default(uuid()) @db.Uuid
+  srNo              Int                             @unique @default(autoincrement()) @map("sr_no")
+  formNumber        String                          @map("form_number") @db.VarChar(50)
+  offlineFormNumber String?                         @map("offline_form_number") @db.VarChar(50)
+  applicationDate   DateTime                        @map("application_date") @db.Date
+  applicantName     String                          @map("applicant_name") @db.VarChar(100)
+  fatherName        String                          @map("father_name") @db.VarChar(100)
+  motherName        String                          @map("mother_name") @db.VarChar(100)
+  dateOfBirth       DateTime                        @map("date_of_birth") @db.Date
+  aadharNumber      String                          @map("aadhar_number") @db.VarChar(12)
+  gotra             String                          @db.VarChar(50)
+  mobile            String                          @db.VarChar(15)
+  address           String
+  pinCode           String                          @map("pin_code") @db.VarChar(10)
+  tehsil            String                          @db.VarChar(100)
+  district          String                          @db.VarChar(100)
+  state             String                          @db.VarChar(100)
+  nomineeName       String?                         @map("nominee_name") @db.VarChar(100)
+  nomineeRelation   String?                         @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile     String?                         @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar     String?                         @map("nominee_aadhar") @db.VarChar(12)
+  affidavitUrl      String?                         @map("affidavit_url") @db.VarChar(512)
+  passportPhotoUrl  String?                         @map("passport_photo_url") @db.VarChar(512)
+  gender            Gender
+  category          ApplicationCategory
+  totalAmount       Decimal                         @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount     Decimal                         @map("pending_amount") @db.Decimal(10, 2)
+  isActive          Boolean                         @default(true) @map("is_active")
+  addedById         String                          @map("added_by_id") @db.Uuid
+  createdAt         DateTime                        @default(now()) @map("created_at")
+  updatedAt         DateTime                        @updatedAt @map("updated_at")
+  deletedAt         DateTime?                       @map("deleted_at")
+  installments      GeneralApplicationInstallment[]
+  addedBy           User                            @relation("AddedByGeneral", fields: [addedById], references: [id])
 
   @@index([mobile])
   @@index([aadharNumber])
@@ -182,40 +182,40 @@ model GeneralApplicationInstallment {
 }
 
 model InsuranceApplication {
-  id               String                            @id @default(uuid()) @db.Uuid
-  srNo             Int                               @unique @default(autoincrement()) @map("sr_no")
-  formNumber       String                            @map("form_number") @db.VarChar(50)
-  offlineFormNumber String?                          @map("offline_form_number") @db.VarChar(50)
-  applicationDate  DateTime                          @map("application_date") @db.Date
-  applicantName    String                            @map("applicant_name") @db.VarChar(100)
-  fatherName       String                            @map("father_name") @db.VarChar(100)
-  wifeName         String?                           @map("wife_name") @db.VarChar(100)
-  motherName       String                            @map("mother_name") @db.VarChar(100)
-  dateOfBirth      DateTime                          @map("date_of_birth") @db.Date
-  aadharNumber     String                            @map("aadhar_number") @db.VarChar(12)
-  gotra            String                            @db.VarChar(50)
-  mobile           String                            @db.VarChar(15)
-  address          String
-  pinCode          String                            @map("pin_code") @db.VarChar(10)
-  tehsil           String                            @db.VarChar(100)
-  district         String                            @db.VarChar(100)
-  state            String                            @db.VarChar(100)
-  nomineeName      String?                           @map("nominee_name") @db.VarChar(100)
-  nomineeRelation  String?                           @map("nominee_relation") @db.VarChar(50)
-  affidavitUrl     String?                           @map("affidavit_url") @db.VarChar(512)
-  passportPhotoUrl String?                           @map("passport_photo_url") @db.VarChar(512)
-  gender           Gender
-  category         ApplicationCategory
-  totalAmount      Decimal                           @map("total_amount") @db.Decimal(10, 2)
-  pendingAmount    Decimal                           @map("pending_amount") @db.Decimal(10, 2)
-  isActive         Boolean                           @default(true) @map("is_active")
-  addedById        String                            @map("added_by_id") @db.Uuid
-  createdAt        DateTime                          @default(now()) @map("created_at")
-  updatedAt        DateTime                          @updatedAt @map("updated_at")
-  deletedAt        DateTime?                         @map("deleted_at")
-  installments     InsuranceApplicationInstallment[]
-  addedBy          User                              @relation("AddedByInsurance", fields: [addedById], references: [id])
-  surakshaBima     SurakshaBimaYojana?
+  id                String                            @id @default(uuid()) @db.Uuid
+  srNo              Int                               @unique @default(autoincrement()) @map("sr_no")
+  formNumber        String                            @map("form_number") @db.VarChar(50)
+  offlineFormNumber String?                           @map("offline_form_number") @db.VarChar(50)
+  applicationDate   DateTime                          @map("application_date") @db.Date
+  applicantName     String                            @map("applicant_name") @db.VarChar(100)
+  fatherName        String                            @map("father_name") @db.VarChar(100)
+  wifeName          String?                           @map("wife_name") @db.VarChar(100)
+  motherName        String                            @map("mother_name") @db.VarChar(100)
+  dateOfBirth       DateTime                          @map("date_of_birth") @db.Date
+  aadharNumber      String                            @map("aadhar_number") @db.VarChar(12)
+  gotra             String                            @db.VarChar(50)
+  mobile            String                            @db.VarChar(15)
+  address           String
+  pinCode           String                            @map("pin_code") @db.VarChar(10)
+  tehsil            String                            @db.VarChar(100)
+  district          String                            @db.VarChar(100)
+  state             String                            @db.VarChar(100)
+  nomineeName       String?                           @map("nominee_name") @db.VarChar(100)
+  nomineeRelation   String?                           @map("nominee_relation") @db.VarChar(50)
+  affidavitUrl      String?                           @map("affidavit_url") @db.VarChar(512)
+  passportPhotoUrl  String?                           @map("passport_photo_url") @db.VarChar(512)
+  gender            Gender
+  category          ApplicationCategory
+  totalAmount       Decimal                           @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount     Decimal                           @map("pending_amount") @db.Decimal(10, 2)
+  isActive          Boolean                           @default(true) @map("is_active")
+  addedById         String                            @map("added_by_id") @db.Uuid
+  createdAt         DateTime                          @default(now()) @map("created_at")
+  updatedAt         DateTime                          @updatedAt @map("updated_at")
+  deletedAt         DateTime?                         @map("deleted_at")
+  installments      InsuranceApplicationInstallment[]
+  addedBy           User                              @relation("AddedByInsurance", fields: [addedById], references: [id])
+  surakshaBima      SurakshaBimaYojana?
 
   @@index([mobile])
   @@index([aadharNumber])
@@ -782,15 +782,15 @@ model AgentPayment {
 // business records -- do not join against it or treat it as a source of truth
 // for any other module.
 model LegacyPaymentEntry {
-  id        String   @id @default(uuid()) @db.Uuid
-  legacyId  String   @map("legacy_id") @db.VarChar(50)
-  entryDate String   @map("entry_date") @db.VarChar(30)
-  amount    Decimal  @db.Decimal(12, 2)
+  id        String    @id @default(uuid()) @db.Uuid
+  legacyId  String    @map("legacy_id") @db.VarChar(50)
+  entryDate String    @map("entry_date") @db.VarChar(30)
+  amount    Decimal   @db.Decimal(12, 2)
   name      String?
-  source    String   @db.VarChar(100)
-  type      String   @db.VarChar(10)
-  refId     String?  @map("ref_id") @db.VarChar(50)
-  createdAt DateTime @default(now()) @map("created_at")
+  source    String    @db.VarChar(100)
+  type      String    @db.VarChar(10)
+  refId     String?   @map("ref_id") @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at")
   deletedAt DateTime? @map("deleted_at")
 
   @@index([entryDate])
@@ -872,16 +872,16 @@ model CustomerAuth {
 }
 
 model CustomerPaymentTransaction {
-  id                String    @id @default(uuid()) @db.Uuid
-  mobile            String    @db.VarChar(15)
-  moduleType        String    @map("module_type") @db.VarChar(30)
-  entityId          String    @map("entity_id") @db.Uuid
-  amount            Decimal   @db.Decimal(10, 2)
-  razorpayOrderId   String    @unique @map("razorpay_order_id") @db.VarChar(100)
-  razorpayPaymentId String?   @map("razorpay_payment_id") @db.VarChar(100)
-  status            String    @default("created") @db.VarChar(20)
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  mobile            String   @db.VarChar(15)
+  moduleType        String   @map("module_type") @db.VarChar(30)
+  entityId          String   @map("entity_id") @db.Uuid
+  amount            Decimal  @db.Decimal(10, 2)
+  razorpayOrderId   String   @unique @map("razorpay_order_id") @db.VarChar(100)
+  razorpayPaymentId String?  @map("razorpay_payment_id") @db.VarChar(100)
+  status            String   @default("created") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@index([mobile])
   @@index([moduleType, entityId])
@@ -998,24 +998,24 @@ model PoolConfig {
 }
 
 model EPin {
-  id            String          @id @default(uuid()) @db.Uuid
-  pinCode       String          @unique @map("pin_code") @db.VarChar(50)
-  schemeCode    String          @map("scheme_code") @db.VarChar(50)
-  slabCode      String?         @map("slab_code") @db.VarChar(50)
-  amount        Decimal         @db.Decimal(10, 2)
-  status        EPinStatus      @default(ACTIVE)
-  generatedById String          @map("generated_by_id") @db.Uuid
-  assignedToId  String?         @map("assigned_to_id") @db.Uuid
-  assignedAt    DateTime?       @map("assigned_at")
-  usedById      String?         @map("used_by_id") @db.Uuid
-  usedAt        DateTime?       @map("used_at")
-  usedInModule  String?         @map("used_in_module") @db.VarChar(50)
-  usedEntityId  String?         @map("used_entity_id") @db.Uuid
-  burntById     String?         @map("burnt_by_id") @db.Uuid
-  burntAt       DateTime?       @map("burnt_at")
-  burnReason    String?         @map("burn_reason")
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  id            String         @id @default(uuid()) @db.Uuid
+  pinCode       String         @unique @map("pin_code") @db.VarChar(50)
+  schemeCode    String         @map("scheme_code") @db.VarChar(50)
+  slabCode      String?        @map("slab_code") @db.VarChar(50)
+  amount        Decimal        @db.Decimal(10, 2)
+  status        EPinStatus     @default(ACTIVE)
+  generatedById String         @map("generated_by_id") @db.Uuid
+  assignedToId  String?        @map("assigned_to_id") @db.Uuid
+  assignedAt    DateTime?      @map("assigned_at")
+  usedById      String?        @map("used_by_id") @db.Uuid
+  usedAt        DateTime?      @map("used_at")
+  usedInModule  String?        @map("used_in_module") @db.VarChar(50)
+  usedEntityId  String?        @map("used_entity_id") @db.Uuid
+  burntById     String?        @map("burnt_by_id") @db.Uuid
+  burntAt       DateTime?      @map("burnt_at")
+  burnReason    String?        @map("burn_reason")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   auditLogs     EPinAuditLog[]
 
   @@index([status])
@@ -1025,14 +1025,14 @@ model EPin {
 }
 
 model EPinAuditLog {
-  id             String      @id @default(uuid()) @db.Uuid
-  epinId         String      @map("epin_id") @db.Uuid
-  fromStatus     EPinStatus? @map("from_status")
-  toStatus       EPinStatus  @map("to_status")
-  performedById  String      @map("performed_by_id") @db.Uuid
-  remarks        String?
-  createdAt      DateTime    @default(now()) @map("created_at")
-  epin           EPin        @relation(fields: [epinId], references: [id], onDelete: Cascade)
+  id            String      @id @default(uuid()) @db.Uuid
+  epinId        String      @map("epin_id") @db.Uuid
+  fromStatus    EPinStatus? @map("from_status")
+  toStatus      EPinStatus  @map("to_status")
+  performedById String      @map("performed_by_id") @db.Uuid
+  remarks       String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  epin          EPin        @relation(fields: [epinId], references: [id], onDelete: Cascade)
 
   @@index([epinId])
   @@map("e_pin_audit_logs")
@@ -1112,42 +1112,42 @@ model JanniDeliveryInstallment {
 }
 
 model AawasRegistration {
-  id               String             @id @default(uuid()) @db.Uuid
-  srNo             Int                @unique @default(autoincrement()) @map("sr_no")
-  formNumber       String             @unique @map("form_number") @db.VarChar(50)
-  applicationDate  DateTime           @map("application_date") @db.Date
-  applicantName    String             @map("applicant_name") @db.VarChar(100)
-  fatherName       String             @map("father_name") @db.VarChar(100)
-  husbandName      String?            @map("husband_name") @db.VarChar(100)
-  motherName       String?            @map("mother_name") @db.VarChar(100)
-  dateOfBirth      DateTime           @map("date_of_birth") @db.Date
+  id               String              @id @default(uuid()) @db.Uuid
+  srNo             Int                 @unique @default(autoincrement()) @map("sr_no")
+  formNumber       String              @unique @map("form_number") @db.VarChar(50)
+  applicationDate  DateTime            @map("application_date") @db.Date
+  applicantName    String              @map("applicant_name") @db.VarChar(100)
+  fatherName       String              @map("father_name") @db.VarChar(100)
+  husbandName      String?             @map("husband_name") @db.VarChar(100)
+  motherName       String?             @map("mother_name") @db.VarChar(100)
+  dateOfBirth      DateTime            @map("date_of_birth") @db.Date
   age              Int?
-  aadharNumber     String             @map("aadhar_number") @db.VarChar(12)
-  gotra            String             @db.VarChar(50)
-  mobile           String             @db.VarChar(15)
+  aadharNumber     String              @map("aadhar_number") @db.VarChar(12)
+  gotra            String              @db.VarChar(50)
+  mobile           String              @db.VarChar(15)
   address          String
-  pinCode          String             @map("pin_code") @db.VarChar(10)
-  tehsil           String             @db.VarChar(100)
-  district         String             @db.VarChar(100)
-  state            String             @default("Rajasthan") @db.VarChar(100)
-  nomineeName      String?            @map("nominee_name") @db.VarChar(100)
-  nomineeRelation  String?            @map("nominee_relation") @db.VarChar(50)
-  nomineeMobile    String?            @map("nominee_mobile") @db.VarChar(15)
-  nomineeAadhar    String?            @map("nominee_aadhar") @db.VarChar(12)
-  passportPhotoUrl String?            @map("passport_photo_url") @db.VarChar(512)
-  affidavitUrl     String?            @map("affidavit_url") @db.VarChar(512)
-  gender           Gender             @default(Male)
+  pinCode          String              @map("pin_code") @db.VarChar(10)
+  tehsil           String              @db.VarChar(100)
+  district         String              @db.VarChar(100)
+  state            String              @default("Rajasthan") @db.VarChar(100)
+  nomineeName      String?             @map("nominee_name") @db.VarChar(100)
+  nomineeRelation  String?             @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile    String?             @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar    String?             @map("nominee_aadhar") @db.VarChar(12)
+  passportPhotoUrl String?             @map("passport_photo_url") @db.VarChar(512)
+  affidavitUrl     String?             @map("affidavit_url") @db.VarChar(512)
+  gender           Gender              @default(Male)
   category         ApplicationCategory @default(A)
-  totalAmount      Decimal            @default(15000) @map("total_amount") @db.Decimal(10, 2)
-  pendingAmount    Decimal            @default(15000) @map("pending_amount") @db.Decimal(10, 2)
-  epinCode         String?            @map("epin_code") @db.VarChar(50)
-  isActive         Boolean            @default(true) @map("is_active")
-  addedById        String             @map("added_by_id") @db.Uuid
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
-  deletedAt        DateTime?          @map("deleted_at")
+  totalAmount      Decimal             @default(15000) @map("total_amount") @db.Decimal(10, 2)
+  pendingAmount    Decimal             @default(15000) @map("pending_amount") @db.Decimal(10, 2)
+  epinCode         String?             @map("epin_code") @db.VarChar(50)
+  isActive         Boolean             @default(true) @map("is_active")
+  addedById        String              @map("added_by_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  deletedAt        DateTime?           @map("deleted_at")
   installments     AawasInstallment[]
-  addedBy          User               @relation("AddedByAawas", fields: [addedById], references: [id])
+  addedBy          User                @relation("AddedByAawas", fields: [addedById], references: [id])
 
   @@index([formNumber])
   @@index([mobile])
@@ -1262,45 +1262,47 @@ model LadoBahinInstallment {
 }
 
 model DhundhotsavRegistration {
-  id               String                   @id @default(uuid()) @db.Uuid
-  srNo             Int                      @unique @default(autoincrement()) @map("sr_no")
-  formNumber       String                   @unique @map("form_number") @db.VarChar(50)
-  applicationDate  DateTime                 @map("application_date") @db.Date
-  applicantName    String                   @map("applicant_name") @db.VarChar(100)
-  fatherName       String                   @map("father_name") @db.VarChar(100)
-  husbandName      String?                  @map("husband_name") @db.VarChar(100)
-  motherName       String?                  @map("mother_name") @db.VarChar(100)
-  dateOfBirth      DateTime                 @map("date_of_birth") @db.Date
-  age              Int?
-  aadharNumber     String                   @map("aadhar_number") @db.VarChar(12)
-  gotra            String                   @db.VarChar(50)
-  mobile           String                   @db.VarChar(15)
-  address          String
-  pinCode          String                   @map("pin_code") @db.VarChar(10)
-  tehsil           String                   @db.VarChar(100)
-  district         String                   @db.VarChar(100)
-  state            String                   @default("Rajasthan") @db.VarChar(100)
-  nomineeName      String?                  @map("nominee_name") @db.VarChar(100)
-  nomineeRelation  String?                  @map("nominee_relation") @db.VarChar(50)
-  nomineeMobile    String?                  @map("nominee_mobile") @db.VarChar(15)
-  nomineeAadhar    String?                  @map("nominee_aadhar") @db.VarChar(12)
-  passportPhotoUrl String?                  @map("passport_photo_url") @db.VarChar(512)
-  affidavitUrl     String?                  @map("affidavit_url") @db.VarChar(512)
-  gender           Gender                   @default(Male)
-  category         ApplicationCategory      @default(A)
-  schemeType       String                   @default("DHUNDHOTSAV") @map("scheme_type") @db.VarChar(50)
-  pool             String                   @default("MALE_POOL") @map("pool") @db.VarChar(50)
-  membershipFee    Decimal                  @default(5100) @map("membership_fee") @db.Decimal(10, 2)
-  epinCode         String?                  @map("epin_code") @db.VarChar(50)
-  isActive         Boolean                  @default(true) @map("is_active")
-  addedById        String                   @map("added_by_id") @db.Uuid
-  createdAt        DateTime                 @default(now()) @map("created_at")
-  updatedAt        DateTime                 @updatedAt @map("updated_at")
-  deletedAt        DateTime?                @map("deleted_at")
-  installments     DhundhotsavInstallment[]
-  addedBy          User                     @relation("AddedByDhundhotsav", fields: [addedById], references: [id])
+  id                String                   @id @default(uuid()) @db.Uuid
+  srNo              Int                      @unique @default(autoincrement()) @map("sr_no")
+  formNumber        String                   @unique @map("form_number") @db.VarChar(50)
+  offlineFormNumber String?                  @map("offline_form_number") @db.VarChar(50)
+  applicationDate   DateTime                 @map("application_date") @db.Date
+  applicantName     String                   @map("applicant_name") @db.VarChar(100)
+  fatherName        String                   @map("father_name") @db.VarChar(100)
+  husbandName       String?                  @map("husband_name") @db.VarChar(100)
+  motherName        String?                  @map("mother_name") @db.VarChar(100)
+  dateOfBirth       DateTime                 @map("date_of_birth") @db.Date
+  age               Int?
+  aadharNumber      String                   @map("aadhar_number") @db.VarChar(12)
+  gotra             String                   @db.VarChar(50)
+  mobile            String                   @db.VarChar(15)
+  address           String
+  pinCode           String                   @map("pin_code") @db.VarChar(10)
+  tehsil            String                   @db.VarChar(100)
+  district          String                   @db.VarChar(100)
+  state             String                   @default("Rajasthan") @db.VarChar(100)
+  nomineeName       String?                  @map("nominee_name") @db.VarChar(100)
+  nomineeRelation   String?                  @map("nominee_relation") @db.VarChar(50)
+  nomineeMobile     String?                  @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar     String?                  @map("nominee_aadhar") @db.VarChar(12)
+  passportPhotoUrl  String?                  @map("passport_photo_url") @db.VarChar(512)
+  affidavitUrl      String?                  @map("affidavit_url") @db.VarChar(512)
+  gender            Gender                   @default(Male)
+  category          ApplicationCategory      @default(A)
+  schemeType        String                   @default("DHUNDHOTSAV") @map("scheme_type") @db.VarChar(50)
+  pool              String                   @default("MALE_POOL") @map("pool") @db.VarChar(50)
+  membershipFee     Decimal                  @default(5100) @map("membership_fee") @db.Decimal(10, 2)
+  epinCode          String?                  @map("epin_code") @db.VarChar(50)
+  isActive          Boolean                  @default(true) @map("is_active")
+  addedById         String                   @map("added_by_id") @db.Uuid
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  deletedAt         DateTime?                @map("deleted_at")
+  installments      DhundhotsavInstallment[]
+  addedBy           User                     @relation("AddedByDhundhotsav", fields: [addedById], references: [id])
 
   @@index([formNumber])
+  @@index([offlineFormNumber], map: "dhundhotsav_registrations_offline_form_number_idx")
   @@index([mobile])
   @@index([aadharNumber])
   @@index([gender])

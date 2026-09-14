@@ -45,6 +45,24 @@ export const createDhundhotsavSchema = z.object({
       .enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"])
       .optional()
       .default("CASH"),
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
   }),
 });
 
@@ -74,6 +92,24 @@ export const updateDhundhotsavSchema = z.object({
     affidavitUrl: z.string().optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C", "D", "E", "F"]).optional(),
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
   }),
 });
 
