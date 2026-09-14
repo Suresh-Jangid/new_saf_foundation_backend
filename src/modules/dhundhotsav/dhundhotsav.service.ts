@@ -9,6 +9,7 @@ import {
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
 import { parseDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
+import { isValidUuid } from "../../utils/compat-helpers";
 import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
 import {
@@ -533,10 +534,53 @@ export class DhundhotsavService {
       updateData.affidavitUrl = saveImagePayload(data.affidavitUrl);
     }
 
+    if (actor.role === "ADMIN") {
+      const addedByCandidate =
+        data.selectedAgentId !== undefined
+          ? data.selectedAgentId
+          : data.addedById !== undefined
+          ? data.addedById
+          : data.agentId;
+
+      if (addedByCandidate !== undefined && addedByCandidate !== null && String(addedByCandidate).trim() !== "") {
+        const targetUserId = String(addedByCandidate).trim();
+        if (!isValidUuid(targetUserId)) {
+          throw new BadRequestError("Valid worker/agent user ID is required");
+        }
+
+        const targetUser = await prisma.user.findFirst({
+          where: { id: targetUserId, deletedAt: null },
+          select: { id: true, role: true, isActive: true },
+        });
+
+        if (!targetUser) {
+          throw new NotFoundError("Target worker/agent not found");
+        }
+
+        if (!targetUser.isActive) {
+          throw new BadRequestError("Selected worker/agent is inactive");
+        }
+
+        if (targetUser.role !== "AGENT" && targetUser.role !== "ADMIN") {
+          throw new BadRequestError("Selected user is not an authorized worker or admin");
+        }
+
+        updateData.addedBy = { connect: { id: targetUser.id } };
+      }
+    }
+
     const updated = await prisma.dhundhotsavRegistration.update({
       where: { id },
       data: updateData,
       include: {
+        addedBy: {
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            role: true,
+          },
+        },
         installments: {
           where: { deletedAt: null },
           orderBy: { date: "asc" },

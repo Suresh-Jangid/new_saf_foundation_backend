@@ -92,6 +92,9 @@ export const updateDhundhotsavSchema = z.object({
     affidavitUrl: z.string().optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C", "D", "E", "F"]).optional(),
+    selectedAgentId: z.string().uuid().optional().nullable(),
+    agentId: z.string().uuid().optional().nullable(),
+    addedById: z.string().uuid().optional().nullable(),
     offlineFormNumber: z
       .string()
       .trim()

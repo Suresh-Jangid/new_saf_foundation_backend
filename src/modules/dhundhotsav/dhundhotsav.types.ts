@@ -69,6 +69,9 @@ export interface UpdateDhundhotsavInput {
   offlineFormNumber?: string | null;
   offline_form_number?: string | null;
   offlineFormNo?: string | null;
+  selectedAgentId?: string | null;
+  agentId?: string | null;
+  addedById?: string | null;
 }
 
 export interface DhundhotsavFilter {

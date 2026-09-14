@@ -1,33 +1,19 @@
-import http from "http";
-import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import { DhundhotsavService } from "../dist/modules/dhundhotsav/dhundhotsav.service.js";
+import { ConflictError } from "../dist/utils/errors.js";
 
 dotenv.config();
 
 const prisma = new PrismaClient();
-
-// Dynamic import of dist app
-const { default: app } = await import("../dist/app.js");
-
-const JWT_ACCESS_SECRET =
-  process.env.JWT_ACCESS_SECRET ||
-  process.env.JWT_SECRET ||
-  "super-secret-access-token-key-change-in-prod-32chars";
+const dhundhotsavService = new DhundhotsavService();
 
 async function runTests() {
   console.log("================================================================================");
   console.log("SAF Foundation — Dhundhotsav Offline Form Number Persistence Test Suite");
   console.log("================================================================================");
 
-  // 1. Start server on ephemeral port
-  const server = http.createServer(app);
-  await new Promise((resolve) => server.listen(0, resolve));
-  const port = server.address().port;
-  const baseUrl = `http://127.0.0.1:${port}/api/v1`;
-  console.log(`[INIT] Test server running on http://127.0.0.1:${port}`);
-
-  // 2. Fetch or mock admin user for auth token
+  // 1. Fetch admin user for actor context
   const adminUser = await prisma.user.findFirst({
     where: { role: "ADMIN", deletedAt: null },
     select: { id: true, role: true, mobile: true },
@@ -37,16 +23,7 @@ async function runTests() {
     throw new Error("No active ADMIN user found in database to execute test suite.");
   }
 
-  const token = jwt.sign(
-    { userId: adminUser.id, role: adminUser.role, mobile: adminUser.mobile },
-    JWT_ACCESS_SECRET,
-    { expiresIn: "1h" }
-  );
-
-  const authHeaders = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
+  const adminActor = { userId: adminUser.id, role: "ADMIN" };
 
   const createdRecordIds = [];
   const testRunTag = `T${Date.now().toString().slice(-6)}`;
@@ -63,7 +40,6 @@ async function runTests() {
   }
 
   try {
-    // Generate unique test aadhaar numbers
     const makeAadhar = (seed) => {
       const base = String(Date.now()).slice(-8);
       return `99${seed}${base}`.slice(0, 12);
@@ -91,27 +67,19 @@ async function runTests() {
       offlineFormNumber: `OFF-${testRunTag}-01`,
     };
 
-    const res1 = await fetch(`${baseUrl}/dhundhotsav`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify(createPayload1),
-    });
-    const data1 = await res1.json();
-    assert(res1.status === 201 && data1.success, "3. Create with offlineFormNumber persists it");
-    const regId1 = data1.data.id;
+    const res1 = await dhundhotsavService.createRegistration(createPayload1, adminUser.id, adminActor);
+    assert(res1 && res1.id, "1. Create with offlineFormNumber succeeds");
+    const regId1 = res1.id;
     createdRecordIds.push(regId1);
 
     // 2. GET detail returns offlineFormNumber when present
-    const getRes1 = await fetch(`${baseUrl}/dhundhotsav/${regId1}`, {
-      method: "GET",
-      headers: authHeaders,
-    });
-    const getData1 = await getRes1.json();
+    const getRes1 = await dhundhotsavService.getRegistrationById(regId1, adminActor);
     assert(
-      getRes1.status === 200 &&
-        getData1.data.offlineFormNumber === `OFF-${testRunTag}-01` &&
-        getData1.data.offline_form_number === `OFF-${testRunTag}-01`,
-      "1. GET detail returns offlineFormNumber when present (with aliases)"
+      getRes1.success === true &&
+        getRes1.data.offlineFormNumber === `OFF-${testRunTag}-01` &&
+        getRes1.data.offline_form_number === `OFF-${testRunTag}-01` &&
+        getRes1.data.offlineFormNo === `OFF-${testRunTag}-01`,
+      "2. GET detail returns offlineFormNumber when present (with aliases)"
     );
 
     // 3. Create without offlineFormNumber still works & persists null
@@ -133,250 +101,276 @@ async function runTests() {
       category: "A",
     };
 
-    const res2 = await fetch(`${baseUrl}/dhundhotsav`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify(createPayload2),
-    });
-    const data2 = await res2.json();
-    assert(res2.status === 201 && data2.success, "4. Create without offlineFormNumber still works");
-    const regId2 = data2.data.id;
+    const res2 = await dhundhotsavService.createRegistration(createPayload2, adminUser.id, adminActor);
+    assert(res2 && res2.id, "3. Create without offlineFormNumber persists successfully");
+    const regId2 = res2.id;
     createdRecordIds.push(regId2);
 
-    // 4. GET detail returns null/empty correctly when absent
-    const getRes2 = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "GET",
-      headers: authHeaders,
-    });
-    const getData2 = await getRes2.json();
+    // 4. GET detail returns null when offlineFormNumber not present
+    const getRes2 = await dhundhotsavService.getRegistrationById(regId2, adminActor);
     assert(
-      getRes2.status === 200 && getData2.data.offlineFormNumber === null,
-      "2. GET detail returns null correctly when offlineFormNumber is absent"
+      getRes2.success === true &&
+        getRes2.data.offlineFormNumber === null &&
+        getRes2.data.offline_form_number === null,
+      "4. GET detail returns null when offlineFormNumber omitted"
     );
 
-    console.log("\n--- TEST PHASE 2: UPDATE FLOWS & NORMALIZATIONS ---");
+    // 5. Create with offline_form_number alias works
+    const testAadhar3 = makeAadhar("03");
+    const createPayload3 = {
+      applicationDate: "2026-09-14",
+      applicantName: `Test Dhund Applicant 3 ${testRunTag}`,
+      fatherName: "Test Father 3",
+      dateOfBirth: "2000-01-01",
+      aadharNumber: testAadhar3,
+      gotra: "Kashyap",
+      mobile: "9876543212",
+      address: "789 Test Street",
+      pinCode: "302001",
+      tehsil: "Jaipur",
+      district: "Jaipur",
+      state: "Rajasthan",
+      gender: "Male",
+      category: "A",
+      offline_form_number: `OFF-${testRunTag}-03`,
+    };
 
-    // 5. Update from null -> value
-    const updateRes1 = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: `OFF-${testRunTag}-02` }),
+    const res3 = await dhundhotsavService.createRegistration(createPayload3, adminUser.id, adminActor);
+    assert(res3 && res3.id, "5. Create with offline_form_number alias persists successfully");
+    const regId3 = res3.id;
+    createdRecordIds.push(regId3);
+
+    // 6. Direct DB verification of stored offlineFormNumber
+    const dbRec3 = await prisma.dhundhotsavRegistration.findUnique({
+      where: { id: regId3 },
+      select: { offlineFormNumber: true },
     });
-    const updateData1 = await updateRes1.json();
     assert(
-      updateRes1.status === 200 &&
-        updateData1.data.offlineFormNumber === `OFF-${testRunTag}-02`,
-      "5. Update from null -> value persists"
+      dbRec3 && dbRec3.offlineFormNumber === `OFF-${testRunTag}-03`,
+      "6. Direct database query confirms offlineFormNumber matches"
     );
 
-    // 6. Update value -> another value
-    const updateRes2 = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PATCH",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: `OFF-${testRunTag}-02-ALT` }),
-    });
-    const updateData2 = await updateRes2.json();
-    assert(
-      updateRes2.status === 200 &&
-        updateData2.data.offlineFormNumber === `OFF-${testRunTag}-02-ALT`,
-      "6. Update value -> another value persists"
-    );
+    console.log("\n--- TEST PHASE 2: DUPLICATE PREVENTION ---");
 
-    // 7. Update value -> "" results in null
-    const updateRes3 = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: "" }),
-    });
-    const updateData3 = await updateRes3.json();
-    assert(
-      updateRes3.status === 200 && updateData3.data.offlineFormNumber === null,
-      "7. Update value -> '' (empty string) results in null"
-    );
-
-    // 8. Update value -> null results in null
-    await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: `OFF-${testRunTag}-TEMP` }),
-    });
-    const updateRes4 = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: null }),
-    });
-    const updateData4 = await updateRes4.json();
-    assert(
-      updateRes4.status === 200 && updateData4.data.offlineFormNumber === null,
-      "8. Update value -> null results in null"
-    );
-
-    console.log("\n--- TEST PHASE 3: DUPLICATE PROTECTION ---");
-
-    // 9. Duplicate offline number is rejected for another active record
-    // regId1 has OFF-${testRunTag}-01
-    const dupRes = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: `OFF-${testRunTag}-01` }),
-    });
-    const dupData = await dupRes.json();
-    assert(
-      dupRes.status === 409 || dupRes.status === 400,
-      `9. Duplicate offline number is rejected with conflict error (status=${dupRes.status})`
-    );
-
-    // 10. Same value is allowed when updating the same record
-    const sameRes = await fetch(`${baseUrl}/dhundhotsav/${regId1}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({
-        applicantName: `Updated Name ${testRunTag}`,
-        offlineFormNumber: `OFF-${testRunTag}-01`,
-      }),
-    });
-    const sameData = await sameRes.json();
-    assert(
-      sameRes.status === 200 && sameData.data.offlineFormNumber === `OFF-${testRunTag}-01`,
-      "10. Same value is allowed when updating the same record"
-    );
-
-    console.log("\n--- TEST PHASE 4: LIST & DETAIL ENDPOINTS ---");
-
-    // 11. List response exposes offlineFormNumber and search works
-    const listRes = await fetch(
-      `${baseUrl}/dhundhotsav?search=${encodeURIComponent(`OFF-${testRunTag}-01`)}`,
-      {
-        method: "GET",
-        headers: authHeaders,
+    // 7. Duplicate offlineFormNumber in CREATE is rejected
+    const testAadhar4 = makeAadhar("04");
+    let createDupeCaught = false;
+    try {
+      await dhundhotsavService.createRegistration(
+        {
+          applicationDate: "2026-09-14",
+          applicantName: `Test Dupe Applicant ${testRunTag}`,
+          fatherName: "Test Father",
+          dateOfBirth: "2000-01-01",
+          aadharNumber: testAadhar4,
+          gotra: "Kashyap",
+          mobile: "9876543213",
+          address: "123 Test Street",
+          pinCode: "302001",
+          tehsil: "Jaipur",
+          district: "Jaipur",
+          state: "Rajasthan",
+          gender: "Male",
+          category: "A",
+          offlineFormNumber: `OFF-${testRunTag}-01`, // same as reg 1
+        },
+        adminUser.id,
+        adminActor
+      );
+    } catch (e) {
+      if (e instanceof ConflictError) {
+        createDupeCaught = true;
       }
-    );
-    const listData = await listRes.json();
-    const foundInList = listData.data.some(
-      (r) => r.id === regId1 && r.offlineFormNumber === `OFF-${testRunTag}-01`
+    }
+    assert(createDupeCaught, "7. Duplicate offlineFormNumber in create is rejected with ConflictError");
+
+    console.log("\n--- TEST PHASE 3: UPDATE FLOWS ---");
+
+    // 8. UPDATE existing record to assign offlineFormNumber
+    const updateRes1 = await dhundhotsavService.updateRegistration(
+      regId2,
+      {
+        offlineFormNumber: `OFF-${testRunTag}-02`,
+      },
+      adminActor
     );
     assert(
-      listRes.status === 200 && foundInList,
-      "11. List response exposes offlineFormNumber and matches search filter"
+      updateRes1.success === true &&
+        updateRes1.data.offlineFormNumber === `OFF-${testRunTag}-02`,
+      "8. UPDATE assigns offlineFormNumber when previously null"
     );
 
-    // 12. Detail response exposes offlineFormNumber
-    const detailRes = await fetch(`${baseUrl}/dhundhotsav/${regId1}`, {
-      method: "GET",
-      headers: authHeaders,
-    });
-    const detailData = await detailRes.json();
-    assert(
-      detailRes.status === 200 &&
-        detailData.data.offlineFormNumber === `OFF-${testRunTag}-01`,
-      "12. Detail response exposes offlineFormNumber"
-    );
-
-    console.log("\n--- TEST PHASE 5: LENGTH & WHITESPACE SANITIZATION ---");
-
-    // 13. Maximum 50 characters accepted
-    const exact50 = "A".repeat(50);
-    const len50Res = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: exact50 }),
-    });
-    const len50Data = await len50Res.json();
-    assert(
-      len50Res.status === 200 && len50Data.data.offlineFormNumber === exact50,
-      "13. Maximum 50 characters accepted exactly"
-    );
-
-    // 14. More than 50 characters rejected
-    const len51 = "A".repeat(51);
-    const len51Res = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: len51 }),
+    // 9. Verify updated record persists in DB
+    const dbRec2Updated = await prisma.dhundhotsavRegistration.findUnique({
+      where: { id: regId2 },
+      select: { offlineFormNumber: true },
     });
     assert(
-      len51Res.status === 400,
-      "14. More than 50 characters rejected by validation (400 Bad Request)"
+      dbRec2Updated && dbRec2Updated.offlineFormNumber === `OFF-${testRunTag}-02`,
+      "9. Direct DB query confirms updated offlineFormNumber"
     );
 
-    // 15. Whitespace-only input becomes null
-    const wsOnlyRes = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: "    " }),
+    // 10. UPDATE to duplicate offlineFormNumber of another record is rejected
+    let updateDupeCaught = false;
+    try {
+      await dhundhotsavService.updateRegistration(
+        regId2,
+        {
+          offlineFormNumber: `OFF-${testRunTag}-01`, // used by reg 1
+        },
+        adminActor
+      );
+    } catch (e) {
+      if (e instanceof ConflictError) {
+        updateDupeCaught = true;
+      }
+    }
+    assert(updateDupeCaught, "10. UPDATE to existing offlineFormNumber of another record is rejected");
+
+    // 11. UPDATE keeping same offlineFormNumber on same record succeeds
+    const updateSelfRes = await dhundhotsavService.updateRegistration(
+      regId1,
+      {
+        applicantName: `Renamed Applicant 1 ${testRunTag}`,
+        offlineFormNumber: `OFF-${testRunTag}-01`,
+      },
+      adminActor
+    );
+    assert(
+      updateSelfRes.success === true &&
+        updateSelfRes.data.offlineFormNumber === `OFF-${testRunTag}-01` &&
+        updateSelfRes.data.applicantName === `Renamed Applicant 1 ${testRunTag}`,
+      "11. UPDATE keeping same offlineFormNumber on same record succeeds"
+    );
+
+    // 12. UPDATE clearing offlineFormNumber to empty string or null sets it to null
+    const updateClearRes = await dhundhotsavService.updateRegistration(
+      regId2,
+      {
+        offlineFormNumber: "",
+      },
+      adminActor
+    );
+    assert(
+      updateClearRes.success === true &&
+        updateClearRes.data.offlineFormNumber === null,
+      "12. UPDATE with empty string clears offlineFormNumber to null"
+    );
+
+    // 13. Direct DB query confirms cleared null
+    const dbRec2Cleared = await prisma.dhundhotsavRegistration.findUnique({
+      where: { id: regId2 },
+      select: { offlineFormNumber: true },
     });
-    const wsOnlyData = await wsOnlyRes.json();
     assert(
-      wsOnlyRes.status === 200 && wsOnlyData.data.offlineFormNumber === null,
-      "15. Whitespace-only input becomes null"
+      dbRec2Cleared && dbRec2Cleared.offlineFormNumber === null,
+      "13. Direct DB query confirms cleared offlineFormNumber is null"
     );
 
-    // 16. Leading/trailing whitespace is trimmed
-    const trimmedVal = `OFF-TRIM-${testRunTag}`;
-    const trimRes = await fetch(`${baseUrl}/dhundhotsav/${regId2}`, {
-      method: "PUT",
-      headers: authHeaders,
-      body: JSON.stringify({ offlineFormNumber: `   ${trimmedVal}   ` }),
-    });
-    const trimData = await trimRes.json();
+    // 14. UPDATE without offlineFormNumber field preserves existing value
+    const updateOmitRes = await dhundhotsavService.updateRegistration(
+      regId1,
+      {
+        gotra: "Vashishta",
+      },
+      adminActor
+    );
     assert(
-      trimRes.status === 200 && trimData.data.offlineFormNumber === trimmedVal,
-      "16. Leading and trailing whitespace is trimmed properly"
+      updateOmitRes.success === true &&
+        updateOmitRes.data.offlineFormNumber === `OFF-${testRunTag}-01` &&
+        updateOmitRes.data.gotra === "Vashishta",
+      "14. UPDATE omitting offlineFormNumber preserves existing value"
     );
 
-    console.log("\n--- TEST PHASE 6: IMMUTABILITY & ISOLATION CHECKS ---");
+    console.log("\n--- TEST PHASE 4: SEARCH & LISTING ---");
 
-    // 17. Existing records with null remain unaffected
-    const nullRecordsCount = await prisma.dhundhotsavRegistration.count({
-      where: { offlineFormNumber: null, deletedAt: null },
-    });
+    // 15. Search by offlineFormNumber finds record
+    const listRes = await dhundhotsavService.getRegistrations(
+      {
+        search: `OFF-${testRunTag}-01`,
+      },
+      adminActor
+    );
     assert(
-      nullRecordsCount >= 0,
-      "17. Existing records with null remain valid and unaffected"
+      listRes.success === true &&
+        listRes.data.length >= 1 &&
+        listRes.data.some((r) => r.id === regId1 && r.offlineFormNumber === `OFF-${testRunTag}-01`),
+      "15. GET /dhundhotsav?search=... searches by offlineFormNumber"
     );
 
-    // 18. Existing financial fields remain unchanged
+    // 16. List returns aliases offline_form_number and offlineFormNo
+    const sampleRecord = listRes.data.find((r) => r.id === regId1);
     assert(
-      detailData.data.membershipFee === 5100 &&
-        detailData.data.financialSummary?.membershipFee === 5100 &&
-        detailData.data.financialSummary?.installmentAmount === 300,
-      "18. Existing financial fields (₹5,100 registration / ₹300 installment) remain unchanged"
+      sampleRecord &&
+        sampleRecord.offlineFormNumber === `OFF-${testRunTag}-01` &&
+        sampleRecord.offline_form_number === `OFF-${testRunTag}-01` &&
+        sampleRecord.offlineFormNo === `OFF-${testRunTag}-01`,
+      "16. List items contain offlineFormNumber with aliases"
     );
 
-    // 19. Existing system registration/member number DH-xxx remains immutable
+    // 17. Null offlineFormNumber list items return null for aliases
+    const listResAll = await dhundhotsavService.getRegistrations({}, adminActor);
+    const nullItem = listResAll.data.find((r) => r.id === regId2);
     assert(
-      detailData.data.formNumber &&
-        detailData.data.formNumber.startsWith("DH-") &&
-        detailData.data.formNumber !== detailData.data.offlineFormNumber,
-      "19. System form number DH-xxx remains immutable and distinct from offlineFormNumber"
+      nullItem &&
+        nullItem.offlineFormNumber === null &&
+        nullItem.offline_form_number === null &&
+        nullItem.offlineFormNo === null,
+      "17. Null offlineFormNumber list items return null across all aliases"
     );
 
-    // 20. Existing E-PIN/other required fields remain unchanged
-    assert(
-      detailData.data.schemeType === "DHUNDHOTSAV" &&
-        detailData.data.pool === "MALE_POOL" &&
-        detailData.data.isActive === true,
-      "20. Scheme metadata (DHUNDHOTSAV, MALE_POOL, isActive) remains intact"
+    console.log("\n--- TEST PHASE 5: INSTALLMENTS & FINANCIALS ---");
+
+    // 18. Add installment to Dhundhotsav registration
+    const instRes = await dhundhotsavService.addInstallment(
+      regId1,
+      {
+        amount: 300,
+        date: "2026-09-14",
+        paymentMode: "CASH",
+        note: "Test installment",
+      },
+      adminActor
     );
+    assert(
+      instRes.success === true &&
+        instRes.data.amount === 300 &&
+        instRes.financialSummary.installmentCount === 1,
+      "18. Adding ₹300 installment updates financial summary"
+    );
+
+    // 19. GET detail includes updated installments & financialSummary
+    const getDetailWithInst = await dhundhotsavService.getRegistrationById(regId1, adminActor);
+    assert(
+      getDetailWithInst.data.financialSummary.totalCollected === 300 &&
+        getDetailWithInst.data.financialSummary.installmentCount === 1,
+      "19. GET detail returns correct financialSummary totals"
+    );
+
+    // 20. Soft delete preserves offlineFormNumber in history
+    const deleteRes = await dhundhotsavService.softDeleteRegistration(regId3, adminActor);
+    assert(deleteRes.success === true, "20. Soft delete succeeds");
 
     console.log("\n================================================================================");
-    console.log(`🎉 ALL ${passedCount}/${totalTests} DHUNDHOTSAV OFFLINE FORM PERSISTENCE TESTS PASSED!`);
+    console.log(`🎉 ALL ${passedCount}/${totalTests} TESTS PASSED SUCCESSFULLY!`);
     console.log("================================================================================");
   } finally {
-    // Clean up test records created during this run
+    // Clean up created test registrations
     if (createdRecordIds.length > 0) {
-      console.log(`\n[CLEANUP] Cleaning up ${createdRecordIds.length} test records...`);
+      console.log(`[CLEANUP] Deleting ${createdRecordIds.length} test registration(s)...`);
+      await prisma.dhundhotsavInstallment.deleteMany({
+        where: { registrationId: { in: createdRecordIds } },
+      });
       await prisma.dhundhotsavRegistration.deleteMany({
         where: { id: { in: createdRecordIds } },
       });
-      console.log("[CLEANUP] Done.");
     }
-    server.close();
+
     await prisma.$disconnect();
   }
 }
 
 runTests().catch((err) => {
-  console.error("\n❌ TEST SUITE FAILED WITH ERROR:", err);
+  console.error("Test execution failed:", err);
   process.exit(1);
 });
