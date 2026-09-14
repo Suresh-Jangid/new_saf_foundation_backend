@@ -9,6 +9,7 @@ import {
   EPinConsumeInput,
   EPinBurnInput,
   EPinAuditQueryInput,
+  EPinValidationResponse,
 } from "./epins.types";
 import crypto from "crypto";
 import { EPinStatus, Prisma } from "@prisma/client";
@@ -368,7 +369,7 @@ export class EpinsService {
     input: EPinValidateInput,
     actor: { userId: string; role: "ADMIN" | "AGENT" },
     txClient?: PrismaTransactionClient
-  ) {
+  ): Promise<EPinValidationResponse> {
     const rawCode = (input.pinNumber || input.pinCode || "").trim();
     if (!rawCode) {
       return {
@@ -391,9 +392,77 @@ export class EpinsService {
       };
     }
 
+    // 1. Check if E-PIN is already used in inventory or linked to an active registration
+    const isAlreadyLinked =
+      pin.status === "USED" ||
+      pin.usedEntityId !== null ||
+      Boolean(
+        await Promise.all([
+          client.janniDeliveryRegistration.findFirst({
+            where: { epinCode: rawCode, deletedAt: null },
+            select: { id: true },
+          }),
+          client.aawasRegistration.findFirst({
+            where: { epinCode: rawCode, deletedAt: null },
+            select: { id: true },
+          }),
+          client.ladoBahinRegistration.findFirst({
+            where: { epinCode: rawCode, deletedAt: null },
+            select: { id: true },
+          }),
+          client.dhundhotsavRegistration.findFirst({
+            where: { epinCode: rawCode, deletedAt: null },
+            select: { id: true },
+          }),
+          client.shubhLaxmiRegistration.findFirst({
+            where: { epinCode: rawCode, deletedAt: null },
+            select: { id: true },
+          }),
+        ]).then((results) => results.some(Boolean))
+      );
+
+    if (isAlreadyLinked) {
+      return {
+        success: true,
+        valid: false,
+        code: "ALREADY_USED",
+        status: "USED",
+        pinNumber: pin.pinCode,
+        pinCode: pin.pinCode,
+        schemeAmount: Number(pin.amount),
+        amount: Number(pin.amount),
+        schemeTypeId: pin.schemeCode,
+        schemeCode: pin.schemeCode,
+        slabCode: pin.slabCode,
+        poolId: pin.slabCode,
+        assignedAgentId: pin.assignedToId,
+        message:
+          "यह E-PIN पहले ही किसी अन्य registration के साथ assign हो चुका है। कृपया दूसरा E-PIN चुनें।",
+      };
+    }
+
+    // 2. Check if E-PIN is revoked/burnt
+    if (pin.status === "BURNT") {
+      return {
+        success: true,
+        valid: false,
+        status: pin.status,
+        pinNumber: pin.pinCode,
+        pinCode: pin.pinCode,
+        schemeAmount: Number(pin.amount),
+        amount: Number(pin.amount),
+        schemeTypeId: pin.schemeCode,
+        schemeCode: pin.schemeCode,
+        slabCode: pin.slabCode,
+        poolId: pin.slabCode,
+        assignedAgentId: pin.assignedToId,
+        message: `E-PIN has been revoked/burnt: ${pin.burnReason || "No reason specified"}`,
+      };
+    }
+
     const effectiveAgentId = input.agentId || (actor.role === "AGENT" ? actor.userId : undefined);
 
-    // Check agent ownership rule for already-assigned PINs
+    // 3. Check agent ownership rule for already-assigned PINs
     if (effectiveAgentId && pin.assignedToId && pin.assignedToId !== effectiveAgentId) {
       return {
         success: true,
@@ -412,6 +481,7 @@ export class EpinsService {
       };
     }
 
+    // 4. Check ACTIVE status rules
     if (pin.status === "ACTIVE") {
       if (actor.role === "AGENT" && pin.assignedToId !== actor.userId) {
         return {
@@ -447,42 +517,7 @@ export class EpinsService {
       };
     }
 
-    if (pin.status === "USED") {
-      return {
-        success: true,
-        valid: false,
-        status: pin.status,
-        pinNumber: pin.pinCode,
-        pinCode: pin.pinCode,
-        schemeAmount: Number(pin.amount),
-        amount: Number(pin.amount),
-        schemeTypeId: pin.schemeCode,
-        schemeCode: pin.schemeCode,
-        slabCode: pin.slabCode,
-        poolId: pin.slabCode,
-        assignedAgentId: pin.assignedToId,
-        message: "E-PIN has already been used and cannot be reused",
-      };
-    }
-
-    if (pin.status === "BURNT") {
-      return {
-        success: true,
-        valid: false,
-        status: pin.status,
-        pinNumber: pin.pinCode,
-        pinCode: pin.pinCode,
-        schemeAmount: Number(pin.amount),
-        amount: Number(pin.amount),
-        schemeTypeId: pin.schemeCode,
-        schemeCode: pin.schemeCode,
-        slabCode: pin.slabCode,
-        poolId: pin.slabCode,
-        assignedAgentId: pin.assignedToId,
-        message: `E-PIN has been revoked/burnt: ${pin.burnReason || "No reason specified"}`,
-      };
-    }
-
+    // 5. Default ASSIGNED valid status
     return {
       success: true,
       valid: true,

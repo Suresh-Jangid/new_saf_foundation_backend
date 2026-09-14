@@ -72,3 +72,20 @@ export interface EPinAuditQueryInput {
   page?: number;
   limit?: number;
 }
+
+export interface EPinValidationResponse {
+  success: boolean;
+  valid: boolean;
+  code?: string;
+  status?: EPinLifecycleStatus;
+  pinNumber?: string;
+  pinCode?: string;
+  schemeAmount?: number;
+  amount?: number;
+  schemeTypeId?: string;
+  schemeCode?: string;
+  slabCode?: string | null;
+  poolId?: string | null;
+  assignedAgentId?: string | null;
+  message: string;
+}
