@@ -11,6 +11,13 @@ const aadharSchema = z
   .length(12, "Aadhaar must be exactly 12 digits")
   .regex(/^\d+$/, "Aadhaar must contain digits only");
 
+const nomineeAadharSchema = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .refine((val) => !val || /^\d{12}$/.test(val.replace(/\D/g, "")), "Nominee Aadhaar must be exactly 12 digits");
+
 export const createJanniDeliverySchema = z.object({
   body: z.object({
     applicationDate: z.string().transform((val) => new Date(val)),
@@ -39,10 +46,37 @@ export const createJanniDeliverySchema = z.object({
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
     nomineeMobile: mobilePhoneSchema.optional().nullable(),
+    nomineeAadhar: nomineeAadharSchema,
+    nominee_aadhar: nomineeAadharSchema,
+    nomineeAadhaar: nomineeAadharSchema,
+    nomineePhotoUrl: z.string().optional().nullable(),
+    nominee_photo_url: z.string().optional().nullable(),
+    nomineePhoto: z.string().optional().nullable(),
+    nomineePassportPhoto: z.string().optional().nullable(),
 
     // Attachments
     passportPhotoUrl: z.string().optional().nullable(),
     affidavitUrl: z.string().optional().nullable(),
+
+    // Offline Form Number
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
 
     // Categorization & Fee
     gender: z.enum(["Male", "Female", "Other"]).optional().default("Female"),
@@ -86,8 +120,33 @@ export const updateJanniDeliverySchema = z.object({
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
     nomineeMobile: mobilePhoneSchema.optional().nullable(),
+    nomineeAadhar: nomineeAadharSchema,
+    nominee_aadhar: nomineeAadharSchema,
+    nomineeAadhaar: nomineeAadharSchema,
+    nomineePhotoUrl: z.string().optional().nullable(),
+    nominee_photo_url: z.string().optional().nullable(),
+    nomineePhoto: z.string().optional().nullable(),
+    nomineePassportPhoto: z.string().optional().nullable(),
     passportPhotoUrl: z.string().optional().nullable(),
     affidavitUrl: z.string().optional().nullable(),
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C", "D", "E", "F"]).optional(),
     totalAmount: z.preprocess((val) => (val !== undefined && val !== null && val !== "" ? Number(val) : undefined), z.number().nonnegative()).optional(),

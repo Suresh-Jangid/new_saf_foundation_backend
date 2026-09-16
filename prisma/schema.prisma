@@ -1042,6 +1042,7 @@ model JanniDeliveryRegistration {
   id               String                     @id @default(uuid()) @db.Uuid
   srNo             Int                        @unique @default(autoincrement()) @map("sr_no")
   formNumber       String                     @unique @map("form_number") @db.VarChar(50)
+  offlineFormNumber String?                   @map("offline_form_number") @db.VarChar(50)
   applicationDate  DateTime                   @map("application_date") @db.Date
   applicantName    String                     @map("applicant_name") @db.VarChar(100)
   fatherName       String                     @map("father_name") @db.VarChar(100)
@@ -1064,6 +1065,8 @@ model JanniDeliveryRegistration {
   nomineeName      String?                    @map("nominee_name") @db.VarChar(100)
   nomineeRelation  String?                    @map("nominee_relation") @db.VarChar(50)
   nomineeMobile    String?                    @map("nominee_mobile") @db.VarChar(15)
+  nomineeAadhar    String?                    @map("nominee_aadhar") @db.VarChar(12)
+  nomineePhotoUrl  String?                    @map("nominee_photo_url") @db.VarChar(512)
   passportPhotoUrl String?                    @map("passport_photo_url") @db.VarChar(512)
   affidavitUrl     String?                    @map("affidavit_url") @db.VarChar(512)
   gender           Gender                     @default(Female)
@@ -1080,6 +1083,7 @@ model JanniDeliveryRegistration {
   addedBy          User                       @relation("AddedByJanniDelivery", fields: [addedById], references: [id])
 
   @@index([formNumber])
+  @@index([offlineFormNumber], map: "janni_delivery_registrations_offline_form_number_idx")
   @@index([mobile])
   @@index([aadharNumber])
   @@index([gender])

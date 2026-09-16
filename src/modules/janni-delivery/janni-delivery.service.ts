@@ -94,6 +94,53 @@ export class JanniDeliveryService {
       );
     }
 
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number ?? data.offlineFormNo;
+    const offlineFormNumber =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
+
+    if (offlineFormNumber) {
+      const existingOffline = await prisma.janniDeliveryRegistration.findFirst({
+        where: {
+          offlineFormNumber,
+          deletedAt: null,
+        },
+        select: { id: true, formNumber: true, applicantName: true },
+      });
+
+      if (existingOffline) {
+        throw new ConflictError(
+          `Offline Form Number "${offlineFormNumber}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+        );
+      }
+    }
+
+    const rawNomineeAadhar =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+    let nomineeAadhar: string | null = null;
+    if (rawNomineeAadhar !== undefined && rawNomineeAadhar !== null && String(rawNomineeAadhar).trim() !== "") {
+      const cleanedNomineeAadhar = String(rawNomineeAadhar).replace(/\D/g, "");
+      if (cleanedNomineeAadhar.length !== 12) {
+        throw new BadRequestError("Nominee Aadhaar number must be exactly 12 digits");
+      }
+      nomineeAadhar = cleanedNomineeAadhar;
+    }
+
+    const rawNomineePhoto =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+    const nomineePhotoUrl = saveImagePayload(rawNomineePhoto);
+
     // Resolve owner agent ID
     const ownerId =
       actor.role === "ADMIN" && data.selectedAgentId
@@ -146,6 +193,7 @@ export class JanniDeliveryService {
       const registration = await tx.janniDeliveryRegistration.create({
         data: {
           formNumber,
+          offlineFormNumber,
           applicationDate,
           applicantName: String(data.applicantName).trim(),
           fatherName: String(data.fatherName).trim(),
@@ -168,6 +216,8 @@ export class JanniDeliveryService {
           nomineeName: data.nomineeName ? String(data.nomineeName).trim() : null,
           nomineeRelation: data.nomineeRelation ? String(data.nomineeRelation).trim() : null,
           nomineeMobile: data.nomineeMobile ? String(data.nomineeMobile).replace(/\D/g, "") : null,
+          nomineeAadhar,
+          nomineePhotoUrl,
           passportPhotoUrl: saveImagePayload(data.passportPhotoUrl),
           affidavitUrl: saveImagePayload(data.affidavitUrl),
           gender: data.gender ? normalizeGender(data.gender) : Gender.Female,
@@ -253,11 +303,13 @@ export class JanniDeliveryService {
       const q = filter.search.trim();
       where.OR = [
         { formNumber: { contains: q, mode: "insensitive" } },
+        { offlineFormNumber: { contains: q, mode: "insensitive" } },
         { applicantName: { contains: q, mode: "insensitive" } },
         { fatherName: { contains: q, mode: "insensitive" } },
         { husbandName: { contains: q, mode: "insensitive" } },
         { mobile: { contains: q } },
         { aadharNumber: { contains: q } },
+        { nomineeAadhar: { contains: q } },
       ];
     }
 
@@ -307,9 +359,22 @@ export class JanniDeliveryService {
       }),
     ]);
 
+    const formattedRecords = records.map((r) => ({
+      ...r,
+      offlineFormNumber: r.offlineFormNumber ?? null,
+      offline_form_number: r.offlineFormNumber ?? null,
+      offlineFormNo: r.offlineFormNumber ?? null,
+      nomineeAadhar: r.nomineeAadhar ?? null,
+      nominee_aadhar: r.nomineeAadhar ?? null,
+      nomineeAadhaar: r.nomineeAadhar ?? null,
+      nomineePhotoUrl: r.nomineePhotoUrl ?? null,
+      nominee_photo_url: r.nomineePhotoUrl ?? null,
+      nomineePhoto: r.nomineePhotoUrl ?? null,
+    }));
+
     return {
       success: true,
-      data: records,
+      data: formattedRecords,
       pagination: {
         page,
         limit,
@@ -360,7 +425,18 @@ export class JanniDeliveryService {
 
     return {
       success: true,
-      data: record,
+      data: {
+        ...record,
+        offlineFormNumber: record.offlineFormNumber ?? null,
+        offline_form_number: record.offlineFormNumber ?? null,
+        offlineFormNo: record.offlineFormNumber ?? null,
+        nomineeAadhar: record.nomineeAadhar ?? null,
+        nominee_aadhar: record.nomineeAadhar ?? null,
+        nomineeAadhaar: record.nomineeAadhar ?? null,
+        nomineePhotoUrl: record.nomineePhotoUrl ?? null,
+        nominee_photo_url: record.nomineePhotoUrl ?? null,
+        nomineePhoto: record.nomineePhotoUrl ?? null,
+      },
     };
   }
 
@@ -386,9 +462,80 @@ export class JanniDeliveryService {
       );
     }
 
+    const rawOfflineUpdate =
+      data.offlineFormNumber !== undefined
+        ? data.offlineFormNumber
+        : data.offline_form_number !== undefined
+        ? data.offline_form_number
+        : data.offlineFormNo;
+
+    let newOfflineFormNumber: string | null | undefined = undefined;
+
+    if (rawOfflineUpdate !== undefined) {
+      const trimmedOffline =
+        rawOfflineUpdate !== null && String(rawOfflineUpdate).trim() !== ""
+          ? String(rawOfflineUpdate).trim()
+          : null;
+
+      if (trimmedOffline && trimmedOffline !== record.offlineFormNumber) {
+        const existingOffline = await prisma.janniDeliveryRegistration.findFirst({
+          where: {
+            offlineFormNumber: trimmedOffline,
+            deletedAt: null,
+            id: { not: id },
+          },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+
+        if (existingOffline) {
+          throw new ConflictError(
+            `Offline Form Number "${trimmedOffline}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+      newOfflineFormNumber = trimmedOffline;
+    }
+
+    const rawNomineeAadharUpdate =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+
+    let newNomineeAadhar: string | null | undefined = undefined;
+    if (rawNomineeAadharUpdate !== undefined) {
+      if (rawNomineeAadharUpdate === null || String(rawNomineeAadharUpdate).trim() === "") {
+        newNomineeAadhar = null;
+      } else {
+        const cleaned = String(rawNomineeAadharUpdate).replace(/\D/g, "");
+        if (cleaned.length !== 12) {
+          throw new BadRequestError("Nominee Aadhaar number must be exactly 12 digits");
+        }
+        newNomineeAadhar = cleaned;
+      }
+    }
+
+    const rawNomineePhotoUpdate =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+
+    let newNomineePhotoUrl: string | null | undefined = undefined;
+    if (rawNomineePhotoUpdate !== undefined) {
+      newNomineePhotoUrl = saveImagePayload(rawNomineePhotoUpdate);
+    }
+
     const updated = await prisma.janniDeliveryRegistration.update({
       where: { id },
       data: {
+        ...(newOfflineFormNumber !== undefined ? { offlineFormNumber: newOfflineFormNumber } : {}),
+        ...(newNomineeAadhar !== undefined ? { nomineeAadhar: newNomineeAadhar } : {}),
+        ...(newNomineePhotoUrl !== undefined ? { nomineePhotoUrl: newNomineePhotoUrl } : {}),
         ...(data.applicantName ? { applicantName: String(data.applicantName).trim() } : {}),
         ...(data.fatherName ? { fatherName: String(data.fatherName).trim() } : {}),
         ...(data.husbandName !== undefined ? { husbandName: data.husbandName ? String(data.husbandName).trim() : null } : {}),
@@ -421,7 +568,18 @@ export class JanniDeliveryService {
     return {
       success: true,
       message: "Janni Delivery registration updated successfully",
-      data: updated,
+      data: {
+        ...updated,
+        offlineFormNumber: updated.offlineFormNumber ?? null,
+        offline_form_number: updated.offlineFormNumber ?? null,
+        offlineFormNo: updated.offlineFormNumber ?? null,
+        nomineeAadhar: updated.nomineeAadhar ?? null,
+        nominee_aadhar: updated.nomineeAadhar ?? null,
+        nomineeAadhaar: updated.nomineeAadhar ?? null,
+        nomineePhotoUrl: updated.nomineePhotoUrl ?? null,
+        nominee_photo_url: updated.nomineePhotoUrl ?? null,
+        nomineePhoto: updated.nomineePhotoUrl ?? null,
+      },
     };
   }
 

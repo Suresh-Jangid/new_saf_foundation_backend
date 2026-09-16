@@ -33,6 +33,16 @@ export interface CreateJanniDeliveryInput {
   selectedAgentId?: string;
   epinCode?: string | null;
   pinNumber?: string | null;
+  offlineFormNumber?: string | null;
+  offline_form_number?: string | null;
+  offlineFormNo?: string | null;
+  nomineeAadhar?: string | null;
+  nominee_aadhar?: string | null;
+  nomineeAadhaar?: string | null;
+  nomineePhotoUrl?: string | null;
+  nominee_photo_url?: string | null;
+  nomineePhoto?: string | null;
+  nomineePassportPhoto?: string | null;
 }
 
 export interface UpdateJanniDeliveryInput {
@@ -56,6 +66,16 @@ export interface UpdateJanniDeliveryInput {
   nomineeName?: string | null;
   nomineeRelation?: string | null;
   nomineeMobile?: string | null;
+  nomineeAadhar?: string | null;
+  nominee_aadhar?: string | null;
+  nomineeAadhaar?: string | null;
+  nomineePhotoUrl?: string | null;
+  nominee_photo_url?: string | null;
+  nomineePhoto?: string | null;
+  nomineePassportPhoto?: string | null;
+  offlineFormNumber?: string | null;
+  offline_form_number?: string | null;
+  offlineFormNo?: string | null;
   passportPhotoUrl?: string | null;
   affidavitUrl?: string | null;
   gender?: Gender;
