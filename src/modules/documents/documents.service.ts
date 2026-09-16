@@ -297,7 +297,9 @@ export class DocumentsService {
     drawTextAt(fullAddress, 208, 197, 9.5);
 
     // 8. Duration / Maturity
-    drawTextAt("बारह महीने", 200, 245, 10, rgb(0.6, 0.1, 0.1));
+    const duration =
+      String((app as any).benefitDuration ?? (app as any).duration ?? "").trim() || "बारह महीने";
+    drawTextAt(duration, 200, 245, 10, rgb(0.6, 0.1, 0.1));
 
     // Create a safe filename matching frontend convention
     const safeName = (app.applicantName || app.formNumber || "bond")
