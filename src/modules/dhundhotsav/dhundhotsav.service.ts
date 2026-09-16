@@ -188,6 +188,36 @@ export class DhundhotsavService {
       }
     }
 
+    const rawNomineeAadhar =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+    const nomineeAadhar =
+      rawNomineeAadhar !== undefined && rawNomineeAadhar !== null && String(rawNomineeAadhar).trim() !== ""
+        ? String(rawNomineeAadhar).replace(/\D/g, "")
+        : null;
+
+    const rawNomineePhoto =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+    const nomineePhotoUrl = saveImagePayload(rawNomineePhoto);
+
+    const rawBenefitDuration =
+      data.benefitDuration !== undefined
+        ? data.benefitDuration
+        : data.duration;
+    const benefitDuration =
+      rawBenefitDuration !== undefined && rawBenefitDuration !== null && String(rawBenefitDuration).trim() !== ""
+        ? String(rawBenefitDuration).trim()
+        : null;
+
     return prisma.$transaction(async (tx) => {
       const formNumber = await nextDhundhotsavFormNumber(tx);
 
@@ -213,7 +243,9 @@ export class DhundhotsavService {
           nomineeName: data.nomineeName ? String(data.nomineeName).trim() : null,
           nomineeRelation: data.nomineeRelation ? String(data.nomineeRelation).trim() : null,
           nomineeMobile: data.nomineeMobile ? String(data.nomineeMobile).replace(/\D/g, "") : null,
-          nomineeAadhar: data.nomineeAadhar ? String(data.nomineeAadhar).replace(/\D/g, "") : null,
+          nomineeAadhar,
+          nomineePhotoUrl,
+          benefitDuration,
           passportPhotoUrl: saveImagePayload(data.passportPhotoUrl),
           affidavitUrl: saveImagePayload(data.affidavitUrl),
           gender: data.gender ? normalizeGender(data.gender) : Gender.Male,
@@ -357,6 +389,14 @@ export class DhundhotsavService {
         offlineFormNumber: rec.offlineFormNumber ?? null,
         offline_form_number: rec.offlineFormNumber ?? null,
         offlineFormNo: rec.offlineFormNumber ?? null,
+        benefitDuration: rec.benefitDuration ?? null,
+        duration: rec.benefitDuration ?? null,
+        nomineePhotoUrl: rec.nomineePhotoUrl ?? null,
+        nominee_photo_url: rec.nomineePhotoUrl ?? null,
+        nomineePhoto: rec.nomineePhotoUrl ?? null,
+        nomineeAadhar: rec.nomineeAadhar ?? null,
+        nominee_aadhar: rec.nomineeAadhar ?? null,
+        nomineeAadhaar: rec.nomineeAadhar ?? null,
         membershipFee: Number(rec.membershipFee),
         installments: rec.installments.map((inst) => ({
           ...inst,
@@ -433,6 +473,14 @@ export class DhundhotsavService {
         offlineFormNumber: record.offlineFormNumber ?? null,
         offline_form_number: record.offlineFormNumber ?? null,
         offlineFormNo: record.offlineFormNumber ?? null,
+        benefitDuration: record.benefitDuration ?? null,
+        duration: record.benefitDuration ?? null,
+        nomineePhotoUrl: record.nomineePhotoUrl ?? null,
+        nominee_photo_url: record.nomineePhotoUrl ?? null,
+        nomineePhoto: record.nomineePhotoUrl ?? null,
+        nomineeAadhar: record.nomineeAadhar ?? null,
+        nominee_aadhar: record.nomineeAadhar ?? null,
+        nomineeAadhaar: record.nomineeAadhar ?? null,
         membershipFee: Number(record.membershipFee),
         installments: record.installments.map((inst) => ({
           ...inst,
@@ -497,10 +545,61 @@ export class DhundhotsavService {
       newOfflineFormNumber = trimmedOffline;
     }
 
+    const rawNomineeAadharUpdate =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+
+    let newNomineeAadhar: string | null | undefined = undefined;
+    if (rawNomineeAadharUpdate !== undefined) {
+      newNomineeAadhar =
+        rawNomineeAadharUpdate !== null && String(rawNomineeAadharUpdate).trim() !== ""
+          ? String(rawNomineeAadharUpdate).replace(/\D/g, "")
+          : null;
+    }
+
+    const rawNomineePhotoUpdate =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+
+    let newNomineePhotoUrl: string | null | undefined = undefined;
+    if (rawNomineePhotoUpdate !== undefined) {
+      newNomineePhotoUrl = saveImagePayload(rawNomineePhotoUpdate);
+    }
+
+    const rawBenefitDurationUpdate =
+      data.benefitDuration !== undefined
+        ? data.benefitDuration
+        : data.duration;
+
+    let newBenefitDuration: string | null | undefined = undefined;
+    if (rawBenefitDurationUpdate !== undefined) {
+      newBenefitDuration =
+        rawBenefitDurationUpdate !== null && String(rawBenefitDurationUpdate).trim() !== ""
+          ? String(rawBenefitDurationUpdate).trim()
+          : null;
+    }
+
     const updateData: Prisma.DhundhotsavRegistrationUpdateInput = {};
 
     if (newOfflineFormNumber !== undefined) {
       updateData.offlineFormNumber = newOfflineFormNumber;
+    }
+    if (newNomineeAadhar !== undefined) {
+      updateData.nomineeAadhar = newNomineeAadhar;
+    }
+    if (newNomineePhotoUrl !== undefined) {
+      updateData.nomineePhotoUrl = newNomineePhotoUrl;
+    }
+    if (newBenefitDuration !== undefined) {
+      updateData.benefitDuration = newBenefitDuration;
     }
 
     if (data.applicantName !== undefined) updateData.applicantName = String(data.applicantName).trim();
@@ -523,7 +622,6 @@ export class DhundhotsavService {
     if (data.nomineeName !== undefined) updateData.nomineeName = data.nomineeName ? String(data.nomineeName).trim() : null;
     if (data.nomineeRelation !== undefined) updateData.nomineeRelation = data.nomineeRelation ? String(data.nomineeRelation).trim() : null;
     if (data.nomineeMobile !== undefined) updateData.nomineeMobile = data.nomineeMobile ? String(data.nomineeMobile).replace(/\D/g, "") : null;
-    if (data.nomineeAadhar !== undefined) updateData.nomineeAadhar = data.nomineeAadhar ? String(data.nomineeAadhar).replace(/\D/g, "") : null;
     if (data.gender !== undefined) updateData.gender = normalizeGender(data.gender);
     if (data.category !== undefined) updateData.category = normalizeCategory(data.category);
 
@@ -598,6 +696,14 @@ export class DhundhotsavService {
         offlineFormNumber: updated.offlineFormNumber ?? null,
         offline_form_number: updated.offlineFormNumber ?? null,
         offlineFormNo: updated.offlineFormNumber ?? null,
+        benefitDuration: updated.benefitDuration ?? null,
+        duration: updated.benefitDuration ?? null,
+        nomineePhotoUrl: updated.nomineePhotoUrl ?? null,
+        nominee_photo_url: updated.nomineePhotoUrl ?? null,
+        nomineePhoto: updated.nomineePhotoUrl ?? null,
+        nomineeAadhar: updated.nomineeAadhar ?? null,
+        nominee_aadhar: updated.nomineeAadhar ?? null,
+        nomineeAadhaar: updated.nomineeAadhar ?? null,
         membershipFee: Number(updated.membershipFee),
         installments: updated.installments.map((inst) => ({
           ...inst,
