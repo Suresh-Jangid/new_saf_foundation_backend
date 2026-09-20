@@ -52,6 +52,22 @@ function normalizePaymentMode(value: unknown): PaymentMode {
   return PaymentMode.CASH;
 }
 
+function normalizeInstallmentAmount(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const str = String(value).trim();
+  if (str === "300" || value === 300) {
+    return 300;
+  }
+  if (str === "1000" || value === 1000) {
+    return 1000;
+  }
+  throw new BadRequestError(
+    "Invalid installmentAmount. Allowed values are 300, 1000, or null"
+  );
+}
+
 // Normalizes a worker/agent name for matching during bulk import: collapses
 // internal whitespace and Unicode-normalizes so visually-identical Hindi
 // names typed slightly differently still match an existing agent.
@@ -283,6 +299,13 @@ export class ApplicationsService {
       category: normalizeCategory(data.category),
       totalAmount,
       pendingAmount: pendingAmount >= 0 ? pendingAmount : 0,
+      installmentAmount: normalizeInstallmentAmount(
+        data.installmentAmount !== undefined
+          ? data.installmentAmount
+          : data.installment_amount !== undefined
+          ? data.installment_amount
+          : data.installment
+      ),
       addedById: ownerId,
     };
 
@@ -476,6 +499,10 @@ export class ApplicationsService {
     const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
     const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
     for (const r of records as any[]) {
+      r.installmentAmount =
+        r.installmentAmount !== undefined && r.installmentAmount !== null
+          ? Number(r.installmentAmount)
+          : null;
       const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
       if (hierarchy) {
         r.seniorCode = hierarchy.seniorCode;
@@ -548,6 +575,10 @@ export class ApplicationsService {
     appObj.workerName = app.addedBy?.name || (app.addedBy?.role === "ADMIN" ? "Super Admin" : "");
     appObj.karyakartaCode = appObj.workerCode;
     appObj.karyakartaName = appObj.workerName;
+    appObj.installmentAmount =
+      appObj.installmentAmount !== undefined && appObj.installmentAmount !== null
+        ? Number(appObj.installmentAmount)
+        : null;
 
     return appObj;
   }
@@ -638,6 +669,18 @@ export class ApplicationsService {
       }
     }
 
+    const rawInstallmentUpdate =
+      data.installmentAmount !== undefined
+        ? data.installmentAmount
+        : data.installment_amount !== undefined
+        ? data.installment_amount
+        : data.installment;
+
+    let newInstallmentAmount: number | null | undefined = undefined;
+    if (rawInstallmentUpdate !== undefined) {
+      newInstallmentAmount = normalizeInstallmentAmount(rawInstallmentUpdate);
+    }
+
     return prisma.generalApplication.update({
       where: { id },
       data: {
@@ -672,6 +715,7 @@ export class ApplicationsService {
         category: data.category !== undefined ? normalizeCategory(data.category) : app.category,
         ...(data.totalAmount !== undefined ? { totalAmount: data.totalAmount } : {}),
         ...(data.pendingAmount !== undefined ? { pendingAmount: data.pendingAmount } : {}),
+        ...(newInstallmentAmount !== undefined ? { installmentAmount: newInstallmentAmount } : {}),
         ...(addedByCandidate && isValidUuid(String(addedByCandidate))
           ? { addedById: String(addedByCandidate) }
           : {}),

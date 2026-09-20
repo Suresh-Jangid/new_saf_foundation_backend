@@ -31,6 +31,19 @@ const optionalMobileSchema = z
   .optional()
   .nullable();
 
+const optionalInstallmentAmountSchema = z
+  .union([
+    z.literal(300),
+    z.literal(1000),
+    z.literal("300"),
+    z.literal("1000"),
+    z.literal(""),
+    z.null(),
+    z.undefined(),
+  ])
+  .optional()
+  .nullable();
+
 // General Application Creation Validation
 export const createGeneralApplicationSchema = z.object({
   body: z.object({
@@ -56,6 +69,9 @@ export const createGeneralApplicationSchema = z.object({
     nomineePhone: optionalMobileSchema,
     nominee_mobile: optionalMobileSchema,
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    installmentAmount: optionalInstallmentAmountSchema,
+    installment_amount: optionalInstallmentAmountSchema,
+    installment: optionalInstallmentAmountSchema,
     gender: z.enum(["Male", "Female", "Other"]),
     category: z.enum(["A", "B", "C"]),
     totalAmount: z.preprocess((val) => Number(val), z.number().positive()),
@@ -89,6 +105,9 @@ export const updateGeneralApplicationSchema = z.object({
     nomineePhone: optionalMobileSchema,
     nominee_mobile: optionalMobileSchema,
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
+    installmentAmount: optionalInstallmentAmountSchema,
+    installment_amount: optionalInstallmentAmountSchema,
+    installment: optionalInstallmentAmountSchema,
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C"]).optional(),
     totalAmount: z.preprocess((val) => Number(val), z.number().positive()).optional(),

@@ -141,6 +141,7 @@ model GeneralApplication {
   category          ApplicationCategory
   totalAmount       Decimal                         @map("total_amount") @db.Decimal(10, 2)
   pendingAmount     Decimal                         @map("pending_amount") @db.Decimal(10, 2)
+  installmentAmount Decimal?                        @map("monthly_installment") @db.Decimal(10, 2)
   isActive          Boolean                         @default(true) @map("is_active")
   addedById         String                          @map("added_by_id") @db.Uuid
   createdAt         DateTime                        @default(now()) @map("created_at")

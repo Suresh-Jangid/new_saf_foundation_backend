@@ -244,6 +244,10 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
     seniorName,
     nomineeAadhar: app.nomineeAadhar ?? app.nomineeAadhaar ?? app.nominee_aadhar ?? "",
     nomineeMobile: app.nomineeMobile ?? app.nomineePhone ?? app.nominee_mobile ?? "",
+    installmentAmount:
+      app.installmentAmount !== undefined && app.installmentAmount !== null
+        ? Number(app.installmentAmount)
+        : null,
     addedby_id: app.addedById ?? app.addedby_id,
   };
 }
