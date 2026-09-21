@@ -188,6 +188,20 @@ export class ApplicationsController {
     }
   }
 
+  public async updateInsuranceApplication(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const result = await service.updateInsuranceApplication(id, req.body);
+      res.status(200).json({
+        success: true,
+        message: "Insurance Application updated successfully",
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public async softDeleteInsuranceApplication(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;

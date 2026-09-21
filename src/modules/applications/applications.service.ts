@@ -776,10 +776,73 @@ export class ApplicationsService {
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
+    const rawNomineeAadharUpdate =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nomineeAadhaar !== undefined
+        ? data.nomineeAadhaar
+        : data.nominee_aadhar;
+
+    let newNomineeAadhar: string | null | undefined = undefined;
+    if (rawNomineeAadharUpdate !== undefined) {
+      if (rawNomineeAadharUpdate === null || String(rawNomineeAadharUpdate).trim() === "") {
+        newNomineeAadhar = null;
+      } else {
+        const cleaned = String(rawNomineeAadharUpdate).replace(/\D/g, "");
+        if (cleaned.length !== 12) {
+          throw new BadRequestError("Nominee Aadhaar must be exactly 12 digits");
+        }
+        newNomineeAadhar = cleaned;
+      }
+    }
+
+    const rawNomineeMobileUpdate =
+      data.nomineeMobile !== undefined
+        ? data.nomineeMobile
+        : data.nomineePhone !== undefined
+        ? data.nomineePhone
+        : data.nominee_mobile;
+
+    let newNomineeMobile: string | null | undefined = undefined;
+    if (rawNomineeMobileUpdate !== undefined) {
+      if (rawNomineeMobileUpdate === null || String(rawNomineeMobileUpdate).trim() === "") {
+        newNomineeMobile = null;
+      } else {
+        const cleaned = String(rawNomineeMobileUpdate).replace(/\D/g, "");
+        if (cleaned.length < 10 || cleaned.length > 15) {
+          throw new BadRequestError("Nominee Mobile must be between 10 and 15 digits");
+        }
+        newNomineeMobile = cleaned;
+      }
+    }
+
+    const rawNomineePhotoUpdate =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nominee_photo !== undefined
+        ? data.nominee_photo
+        : data.nomineePassportPhoto;
+
+    let newNomineePhotoUrl: string | null | undefined = undefined;
+    if (rawNomineePhotoUpdate !== undefined) {
+      if (rawNomineePhotoUpdate === null || String(rawNomineePhotoUpdate).trim() === "") {
+        newNomineePhotoUrl = null;
+      } else {
+        newNomineePhotoUrl = saveImagePayload(rawNomineePhotoUpdate);
+      }
+    }
+
     return prisma.insuranceApplication.update({
       where: { id },
       data: {
         ...(newOfflineFormNumber !== undefined ? { offlineFormNumber: newOfflineFormNumber } : {}),
+        ...(newNomineeAadhar !== undefined ? { nomineeAadhar: newNomineeAadhar } : {}),
+        ...(newNomineeMobile !== undefined ? { nomineeMobile: newNomineeMobile } : {}),
+        ...(newNomineePhotoUrl !== undefined ? { nomineePhotoUrl: newNomineePhotoUrl } : {}),
         applicationDate:
           data.applicationDate !== undefined
             ? parseRequiredDate(data.applicationDate, "applicationDate")
@@ -986,11 +1049,41 @@ export class ApplicationsService {
           state: String(data.state || "").trim(),
           nomineeName: data.nomineeName ? String(data.nomineeName).trim() : null,
           nomineeRelation: data.nomineeRelation ? String(data.nomineeRelation).trim() : null,
+          nomineeAadhar: (() => {
+            const raw = data.nomineeAadhar ?? data.nomineeAadhaar ?? data.nominee_aadhar;
+            if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+            const cleaned = String(raw).replace(/\D/g, "");
+            if (cleaned.length !== 12) {
+              throw new BadRequestError("Nominee Aadhaar must be exactly 12 digits");
+            }
+            return cleaned;
+          })(),
+          nomineeMobile: (() => {
+            const raw = data.nomineeMobile ?? data.nomineePhone ?? data.nominee_mobile;
+            if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+            const cleaned = String(raw).replace(/\D/g, "");
+            if (cleaned.length < 10 || cleaned.length > 15) {
+              throw new BadRequestError("Nominee Mobile must be between 10 and 15 digits");
+            }
+            return cleaned;
+          })(),
+          nomineePhotoUrl: (() => {
+            const raw =
+              data.nomineePhotoUrl ??
+              data.nomineePhoto ??
+              data.nominee_photo_url ??
+              data.nominee_photo ??
+              data.nomineePassportPhoto;
+            if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+            return saveImagePayload(raw);
+          })(),
           gender: normalizeGender(data.gender),
           category: normalizeCategory(data.category),
           totalAmount,
           pendingAmount: pendingAmount >= 0 ? pendingAmount : 0,
-          passportPhotoUrl: data.passportPhotoUrl || data.passportPhoto || null,
+          passportPhotoUrl: saveImagePayload(
+            data.passportPhotoUrl || data.passportPhoto || data.passport_photo || data.photo
+          ),
           addedById: ownerId,
         },
       });

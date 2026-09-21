@@ -8,6 +8,7 @@ import {
   updateGeneralApplicationSchema,
   createInstallmentSchema,
   createInsuranceApplicationSchema,
+  updateInsuranceApplicationSchema,
   createSurakshaBimaSchema,
 } from "./applications.schema";
 
@@ -94,6 +95,14 @@ router.post(
   checkPermission("suraksha_bima_yojana_payment", "create") as any,
   validateRequest(createInsuranceApplicationSchema),
   controller.createInsuranceApplication.bind(controller)
+);
+
+// Update Insurance Application details
+router.put(
+  "/insurance/:id",
+  checkPermission("suraksha_bima_yojana_payment", "update") as any,
+  validateRequest(updateInsuranceApplicationSchema),
+  controller.updateInsuranceApplication.bind(controller)
 );
 
 // Delete Insurance Application

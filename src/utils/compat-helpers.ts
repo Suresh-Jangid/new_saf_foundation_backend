@@ -331,6 +331,13 @@ export function mapInsuranceApplicationRecord(app: Record<string, any>) {
   const firstInstallment = installments[0] || {};
   const passportPhoto =
     app.passportPhotoUrl ?? app.passport_photo ?? app.passportPhoto ?? "";
+  const nomineePhoto =
+    app.nomineePhotoUrl ??
+    app.nomineePassportPhoto ??
+    app.nomineePhoto ??
+    app.nominee_photo ??
+    app.nominee_photo_url ??
+    "";
 
   return {
     ...app,
@@ -358,6 +365,15 @@ export function mapInsuranceApplicationRecord(app: Record<string, any>) {
     nomineeName: app.nomineeName ?? app.nominee_name,
     nominee_relation: app.nomineeRelation ?? app.nominee_relation,
     nomineeRelation: app.nomineeRelation ?? app.nominee_relation,
+    nominee_aadhar: app.nomineeAadhar ?? app.nominee_aadhar ?? app.nomineeAadhaar ?? "",
+    nomineeAadhar: app.nomineeAadhar ?? app.nominee_aadhar ?? app.nomineeAadhaar ?? "",
+    nominee_mobile: app.nomineeMobile ?? app.nominee_mobile ?? app.nomineePhone ?? "",
+    nomineeMobile: app.nomineeMobile ?? app.nominee_mobile ?? app.nomineePhone ?? "",
+    nominee_photo: nomineePhoto,
+    nomineePhoto: nomineePhoto,
+    nomineePassportPhoto: nomineePhoto,
+    nominee_photo_url: app.nomineePhotoUrl ?? nomineePhoto,
+    nomineePhotoUrl: app.nomineePhotoUrl ?? nomineePhoto,
     passport_photo: passportPhoto,
     passportPhoto,
     passportPhotoUrl: app.passportPhotoUrl ?? passportPhoto,
