@@ -23,10 +23,32 @@ export const createLadoBahinSchema = z.object({
     state: z.string().optional().default("Rajasthan"),
     muklawaDate: z.string().optional().nullable(),
     muklawa_date: z.string().optional().nullable(),
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
     nomineeMobile: z.string().optional().nullable(),
     nomineeAadhar: z.string().optional().nullable(),
+    nomineePhotoUrl: z.string().optional().nullable(),
+    nominee_photo_url: z.string().optional().nullable(),
+    nomineePhoto: z.string().optional().nullable(),
+    nomineePassportPhoto: z.string().optional().nullable(),
     passportPhotoUrl: z.string().optional().nullable(),
     affidavitUrl: z.string().optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional().default("Female"),
@@ -69,10 +91,32 @@ export const updateLadoBahinSchema = z.object({
     state: z.string().optional(),
     muklawaDate: z.string().optional().nullable(),
     muklawa_date: z.string().optional().nullable(),
+    offlineFormNumber: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offline_form_number: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
+    offlineFormNo: z
+      .string()
+      .trim()
+      .max(50, "Offline Form Number must not exceed 50 characters")
+      .optional()
+      .nullable(),
     nomineeName: z.string().optional().nullable(),
     nomineeRelation: z.string().optional().nullable(),
     nomineeMobile: z.string().optional().nullable(),
     nomineeAadhar: z.string().optional().nullable(),
+    nomineePhotoUrl: z.string().optional().nullable(),
+    nominee_photo_url: z.string().optional().nullable(),
+    nomineePhoto: z.string().optional().nullable(),
+    nomineePassportPhoto: z.string().optional().nullable(),
     passportPhotoUrl: z.string().optional().nullable(),
     affidavitUrl: z.string().optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),

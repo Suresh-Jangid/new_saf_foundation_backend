@@ -162,6 +162,53 @@ export class LadoBahinService {
       );
     }
 
+    const rawOffline = data.offlineFormNumber ?? data.offline_form_number ?? data.offlineFormNo;
+    const offlineFormNumber =
+      rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
+        ? String(rawOffline).trim()
+        : null;
+
+    if (offlineFormNumber) {
+      const existingOffline = await prisma.ladoBahinRegistration.findFirst({
+        where: {
+          offlineFormNumber,
+          deletedAt: null,
+        },
+        select: { id: true, formNumber: true, applicantName: true },
+      });
+
+      if (existingOffline) {
+        throw new ConflictError(
+          `Offline Form Number "${offlineFormNumber}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+        );
+      }
+    }
+
+    const rawNomineeAadhar =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+    let nomineeAadhar: string | null = null;
+    if (rawNomineeAadhar !== undefined && rawNomineeAadhar !== null && String(rawNomineeAadhar).trim() !== "") {
+      const cleanedNomineeAadhar = String(rawNomineeAadhar).replace(/\D/g, "");
+      if (cleanedNomineeAadhar.length !== 12) {
+        throw new BadRequestError("Nominee Aadhaar number must be exactly 12 digits");
+      }
+      nomineeAadhar = cleanedNomineeAadhar;
+    }
+
+    const rawNomineePhoto =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+    const nomineePhotoUrl = saveImagePayload(rawNomineePhoto);
+
     // Resolve owner agent ID
     const ownerId =
       actor.role === "ADMIN" && data.selectedAgentId
@@ -219,6 +266,7 @@ export class LadoBahinService {
       const registration = await tx.ladoBahinRegistration.create({
         data: {
           formNumber,
+          offlineFormNumber,
           applicationDate,
           applicantName: String(data.applicantName).trim(),
           fatherName: String(data.fatherName).trim(),
@@ -238,7 +286,8 @@ export class LadoBahinService {
           nomineeName: data.nomineeName ? String(data.nomineeName).trim() : null,
           nomineeRelation: data.nomineeRelation ? String(data.nomineeRelation).trim() : null,
           nomineeMobile: data.nomineeMobile ? String(data.nomineeMobile).replace(/\D/g, "") : null,
-          nomineeAadhar: data.nomineeAadhar ? String(data.nomineeAadhar).replace(/\D/g, "") : null,
+          nomineeAadhar: nomineeAadhar,
+          nomineePhotoUrl: nomineePhotoUrl,
           passportPhotoUrl: saveImagePayload(data.passportPhotoUrl),
           affidavitUrl: saveImagePayload(data.affidavitUrl),
           gender: data.gender ? normalizeGender(data.gender) : Gender.Female,
@@ -328,6 +377,7 @@ export class LadoBahinService {
       const q = filter.search.trim();
       where.OR = [
         { formNumber: { contains: q, mode: "insensitive" } },
+        { offlineFormNumber: { contains: q, mode: "insensitive" } },
         { applicantName: { contains: q, mode: "insensitive" } },
         { fatherName: { contains: q, mode: "insensitive" } },
         { husbandName: { contains: q, mode: "insensitive" } },
@@ -488,7 +538,39 @@ export class LadoBahinService {
       throw new ForbiddenError("Access Denied: You do not have permission to edit this application");
     }
 
+    const rawOfflineUpdate =
+      data.offlineFormNumber !== undefined
+        ? data.offlineFormNumber
+        : data.offline_form_number !== undefined
+        ? data.offline_form_number
+        : data.offlineFormNo;
+
     const updateData: Prisma.LadoBahinRegistrationUpdateInput = {};
+
+    if (rawOfflineUpdate !== undefined) {
+      const trimmedOffline =
+        rawOfflineUpdate !== null && String(rawOfflineUpdate).trim() !== ""
+          ? String(rawOfflineUpdate).trim()
+          : null;
+
+      if (trimmedOffline && trimmedOffline !== record.offlineFormNumber) {
+        const existingOffline = await prisma.ladoBahinRegistration.findFirst({
+          where: {
+            offlineFormNumber: trimmedOffline,
+            deletedAt: null,
+            id: { not: id },
+          },
+          select: { id: true, formNumber: true, applicantName: true },
+        });
+
+        if (existingOffline) {
+          throw new ConflictError(
+            `Offline Form Number "${trimmedOffline}" is already assigned to application ${existingOffline.formNumber} (${existingOffline.applicantName})`
+          );
+        }
+      }
+      updateData.offlineFormNumber = trimmedOffline;
+    }
 
     if (data.applicantName !== undefined) updateData.applicantName = String(data.applicantName).trim();
     if (data.fatherName !== undefined) updateData.fatherName = String(data.fatherName).trim();
@@ -513,7 +595,37 @@ export class LadoBahinService {
     if (data.nomineeName !== undefined) updateData.nomineeName = data.nomineeName ? String(data.nomineeName).trim() : null;
     if (data.nomineeRelation !== undefined) updateData.nomineeRelation = data.nomineeRelation ? String(data.nomineeRelation).trim() : null;
     if (data.nomineeMobile !== undefined) updateData.nomineeMobile = data.nomineeMobile ? String(data.nomineeMobile).replace(/\D/g, "") : null;
-    if (data.nomineeAadhar !== undefined) updateData.nomineeAadhar = data.nomineeAadhar ? String(data.nomineeAadhar).replace(/\D/g, "") : null;
+
+    const rawNomineeAadharUpdate =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar;
+    if (rawNomineeAadharUpdate !== undefined) {
+      if (rawNomineeAadharUpdate === null || String(rawNomineeAadharUpdate).trim() === "") {
+        updateData.nomineeAadhar = null;
+      } else {
+        const cleaned = String(rawNomineeAadharUpdate).replace(/\D/g, "");
+        if (cleaned.length !== 12) {
+          throw new BadRequestError("Nominee Aadhaar number must be exactly 12 digits");
+        }
+        updateData.nomineeAadhar = cleaned;
+      }
+    }
+
+    const rawNomineePhotoUpdate =
+      data.nomineePhotoUrl !== undefined
+        ? data.nomineePhotoUrl
+        : data.nominee_photo_url !== undefined
+        ? data.nominee_photo_url
+        : data.nomineePhoto !== undefined
+        ? data.nomineePhoto
+        : data.nomineePassportPhoto;
+    if (rawNomineePhotoUpdate !== undefined) {
+      updateData.nomineePhotoUrl = saveImagePayload(rawNomineePhotoUpdate);
+    }
+
     if (data.passportPhotoUrl !== undefined) updateData.passportPhotoUrl = saveImagePayload(data.passportPhotoUrl);
     if (data.affidavitUrl !== undefined) updateData.affidavitUrl = saveImagePayload(data.affidavitUrl);
     if (data.gender !== undefined) updateData.gender = normalizeGender(data.gender);
