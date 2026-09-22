@@ -8,7 +8,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
-import { parseDateInput } from "../../utils/parse-date";
+import { parseDateInput, parseOptionalDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
 import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
@@ -191,6 +191,8 @@ export class LadoBahinService {
 
     const applicationDate = parseDateInput(data.applicationDate, "applicationDate");
     const dateOfBirth = parseDateInput(data.dateOfBirth, "dateOfBirth");
+    const rawMuklawaDate = data.muklawaDate !== undefined ? data.muklawaDate : data.muklawa_date;
+    const muklawaDate = rawMuklawaDate ? parseOptionalDateInput(rawMuklawaDate, "muklawaDate") : null;
 
     const membershipFee = LADO_BAHIN_MEMBERSHIP_FEE;
     const paymentAmount = data.paymentAmount ? Number(data.paymentAmount) : 0;
@@ -224,6 +226,7 @@ export class LadoBahinService {
           motherName: data.motherName ? String(data.motherName).trim() : null,
           dateOfBirth,
           age: data.age !== undefined && data.age !== null ? Number(data.age) : null,
+          muklawaDate: muklawaDate || null,
           aadharNumber: rawAadhar,
           gotra: String(data.gotra).trim(),
           mobile: String(data.mobile).replace(/\D/g, ""),
@@ -493,6 +496,13 @@ export class LadoBahinService {
     if (data.motherName !== undefined) updateData.motherName = data.motherName ? String(data.motherName).trim() : null;
     if (data.dateOfBirth !== undefined) updateData.dateOfBirth = parseDateInput(data.dateOfBirth, "dateOfBirth");
     if (data.age !== undefined) updateData.age = data.age !== null ? Number(data.age) : null;
+    const rawMuklawaDate = data.muklawaDate !== undefined ? data.muklawaDate : data.muklawa_date;
+    if (rawMuklawaDate !== undefined) {
+      updateData.muklawaDate =
+        rawMuklawaDate === null || rawMuklawaDate === ""
+          ? null
+          : parseDateInput(rawMuklawaDate, "muklawaDate");
+    }
     if (data.gotra !== undefined) updateData.gotra = String(data.gotra).trim();
     if (data.mobile !== undefined) updateData.mobile = String(data.mobile).replace(/\D/g, "");
     if (data.address !== undefined) updateData.address = String(data.address).trim();

@@ -1205,6 +1205,7 @@ model LadoBahinRegistration {
   motherName       String?                @map("mother_name") @db.VarChar(100)
   dateOfBirth      DateTime               @map("date_of_birth") @db.Date
   age              Int?
+  muklawaDate      DateTime?              @map("muklawa_date") @db.Date
   aadharNumber     String                 @map("aadhar_number") @db.VarChar(12)
   gotra            String                 @db.VarChar(50)
   mobile           String                 @db.VarChar(15)

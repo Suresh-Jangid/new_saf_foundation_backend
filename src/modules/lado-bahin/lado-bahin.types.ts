@@ -27,6 +27,8 @@ export interface CreateLadoBahinInput {
   tehsil: string;
   district: string;
   state?: string;
+  muklawaDate?: string | Date | null;
+  muklawa_date?: string | Date | null;
   nomineeName?: string | null;
   nomineeRelation?: string | null;
   nomineeMobile?: string | null;
@@ -60,6 +62,8 @@ export interface UpdateLadoBahinInput {
   tehsil?: string;
   district?: string;
   state?: string;
+  muklawaDate?: string | Date | null;
+  muklawa_date?: string | Date | null;
   nomineeName?: string | null;
   nomineeRelation?: string | null;
   nomineeMobile?: string | null;

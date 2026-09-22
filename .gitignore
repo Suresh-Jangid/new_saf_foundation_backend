@@ -44,6 +44,7 @@ _tmp-*.json
 
 # Database dumps
 *.sql
+!prisma/migrations/**/*.sql
 
 # OS
 .DS_Store
