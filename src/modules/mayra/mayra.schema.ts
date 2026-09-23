@@ -26,6 +26,8 @@ export const createMayraRegistrationSchema = z.object({
     mobile: mobilePhoneSchema,
     nomineeName: z.string().min(2, "Nominee name is required"),
     nomineeFatherName: z.string().optional().nullable(),
+    nomineeFathername: z.string().optional().nullable(),
+    nominee_father_name: z.string().optional().nullable(),
     nomineeGotra: z.string().optional().nullable(),
     nomineeAddress: z.string().optional().nullable(),
     tehsil: z.string().min(2, "Tehsil is required"),
