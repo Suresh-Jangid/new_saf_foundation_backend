@@ -97,9 +97,11 @@ import { prisma } from "../config/db";
 export interface ResolvedHierarchySenior {
   seniorCode: string;
   seniorName: string;
+  seniorOfflineFormNumber?: string | null;
   level?: "LEVEL_1" | "LEVEL_2";
   parentAgentId?: string | null;
   parentEmployeeId?: string | null;
+  parentOfflineFormNumber?: string | null;
   parentName?: string | null;
   canCreateSubAgent?: boolean;
 }
@@ -108,7 +110,7 @@ export interface ResolvedHierarchySenior {
  * Efficiently batch-resolves senior hierarchy for a list of agent user IDs.
  * Rules:
  * - Level 1 Agent (parent_agent_id is null): reports to ADMIN (Code: 'ADMIN', Name: creator admin or 'Super Admin')
- * - Level 2 Agent (parent_agent_id present): reports to Senior Agent (Code: parent employeeId, Name: parent name)
+ * - Level 2 Agent (parent_agent_id present): reports to Senior Agent (Code: parent offlineFormNumber or employeeId, Name: parent name)
  * - Admin (role ADMIN): Code: 'ADMIN', Name: user.name or 'Super Admin'
  */
 export async function resolveAgentSeniorHierarchyBatch(
@@ -128,6 +130,7 @@ export async function resolveAgentSeniorHierarchyBatch(
         level: string | null;
         can_create_sub_agent: boolean | null;
         parent_employee_id: string | null;
+        parent_offline_form_number: string | null;
         parent_name: string | null;
         creator_name: string | null;
       }>
@@ -138,25 +141,33 @@ export async function resolveAgentSeniorHierarchyBatch(
          ah.level::text as level,
          ah.can_create_sub_agent,
          parent_ap.employee_id AS parent_employee_id,
+         parent_ap.offline_form_number AS parent_offline_form_number,
          parent_u.name AS parent_name,
          creator_u.name AS creator_name
        FROM agent_hierarchies ah
-       LEFT JOIN users parent_u ON parent_u.id = ah.parent_agent_id AND parent_u.deleted_at IS NULL
-       LEFT JOIN agent_profiles parent_ap ON parent_ap.user_id = ah.parent_agent_id AND parent_ap.deleted_at IS NULL
+       LEFT JOIN agent_profiles parent_ap ON (parent_ap.user_id = ah.parent_agent_id OR parent_ap.id = ah.parent_agent_id) AND parent_ap.deleted_at IS NULL
+       LEFT JOIN users parent_u ON (parent_u.id = ah.parent_agent_id OR parent_u.id = parent_ap.user_id) AND parent_u.deleted_at IS NULL
        LEFT JOIN users creator_u ON creator_u.id = ah.created_by_id AND creator_u.deleted_at IS NULL
        WHERE ah.agent_id = ANY($1::uuid[])`,
       validIds
     );
 
     for (const row of rows) {
-      if (row.parent_agent_id && row.parent_employee_id) {
+      if (row.parent_agent_id && (row.parent_offline_form_number || row.parent_employee_id || row.parent_name)) {
+        const resolvedSeniorCode =
+          row.parent_offline_form_number ||
+          row.parent_employee_id ||
+          "";
+
         // Level-2 Sub-Agent: Reports to Parent Senior Agent
         map.set(row.agent_id, {
-          seniorCode: row.parent_employee_id,
+          seniorCode: resolvedSeniorCode,
           seniorName: row.parent_name || "Senior Agent",
+          seniorOfflineFormNumber: row.parent_offline_form_number || null,
           level: "LEVEL_2",
           parentAgentId: row.parent_agent_id,
           parentEmployeeId: row.parent_employee_id,
+          parentOfflineFormNumber: row.parent_offline_form_number || null,
           parentName: row.parent_name,
           canCreateSubAgent: false,
         });
@@ -165,9 +176,11 @@ export async function resolveAgentSeniorHierarchyBatch(
         map.set(row.agent_id, {
           seniorCode: "ADMIN",
           seniorName: row.creator_name || "Super Admin",
+          seniorOfflineFormNumber: null,
           level: "LEVEL_1",
           parentAgentId: null,
           parentEmployeeId: null,
+          parentOfflineFormNumber: null,
           parentName: null,
           canCreateSubAgent: row.can_create_sub_agent ?? true,
         });
@@ -270,6 +283,65 @@ export function mapMayraApplicationRecord(reg: Record<string, any>) {
     reg.nominee_photo ??
     "";
 
+  // Derive canonical Worker & Senior Codes / Names
+  const isAdmin = addedBy.role === "ADMIN" || reg.addedByRole === "ADMIN";
+  const agentProfile = addedBy.agentProfile || reg.agentProfile || {};
+  const agentEmployeeId = agentProfile.employeeId || addedBy.employeeId || "";
+  const profileOffline = agentProfile.offlineFormNumber || agentProfile.offline_form_number || "";
+
+  // Worker code: sanitize so a UUID is NEVER used as code
+  let rawWorkerCode =
+    reg.workerOfflineFormNumber ||
+    reg.worker_offline_form_number ||
+    reg.agentOfflineFormNumber ||
+    reg.agent_offline_form_number ||
+    profileOffline ||
+    reg.workerCode ||
+    reg.worker_code ||
+    reg.karyakartaCode ||
+    (isAdmin ? "ADMIN" : agentEmployeeId);
+
+  if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+    rawWorkerCode = isAdmin ? "ADMIN" : profileOffline || agentEmployeeId || "";
+  }
+  const workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const karyakartaCode = workerCode;
+  const workerOfflineFormNumber =
+    reg.workerOfflineFormNumber ||
+    reg.worker_offline_form_number ||
+    reg.agentOfflineFormNumber ||
+    reg.agent_offline_form_number ||
+    profileOffline ||
+    workerCode;
+
+  const workerName = reg.workerName || reg.karyakartaName || reg.added_name || addedBy.name || (isAdmin ? "Super Admin" : "Super Admin");
+  const karyakartaName = workerName;
+  const workerMobile = reg.workerMobile || reg.added_mobile || addedBy.mobile || "";
+
+  // Senior code & name: sanitize so a UUID is NEVER used
+  let rawSeniorCode =
+    reg.seniorOfflineFormNumber ||
+    reg.senior_offline_form_number ||
+    reg.seniorAgentOfflineFormNumber ||
+    reg.senior_agent_offline_form_number ||
+    reg.seniorCode ||
+    reg.senior_code ||
+    reg.uplineCode ||
+    reg.upline_code;
+
+  if (!rawSeniorCode || isValidUuid(rawSeniorCode)) {
+    rawSeniorCode = "";
+  }
+  const seniorCode = rawSeniorCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const seniorOfflineFormNumber =
+    reg.seniorOfflineFormNumber ||
+    reg.senior_offline_form_number ||
+    reg.seniorAgentOfflineFormNumber ||
+    reg.senior_agent_offline_form_number ||
+    (seniorCode !== "ADMIN" ? seniorCode : "");
+
+  const seniorName = reg.seniorName || reg.seniorWorker || (isAdmin ? (addedBy.name || "Super Admin") : "Super Admin");
+
   // MayraRegistration has no totalAmount/paymentAmount/pendingAmount columns
   // (unlike GeneralApplication) — the one-time fee owed is the age-slab
   // joiningFee, and what's actually been paid lives in the installments relation.
@@ -288,15 +360,25 @@ export function mapMayraApplicationRecord(reg: Record<string, any>) {
     paymentDate: lastInstallment?.date ?? null,
     form_number: reg.formNumber ?? reg.form_number,
     formNumber: reg.formNumber ?? reg.form_number,
+    offline_form_number: reg.offlineFormNumber ?? reg.offline_form_number ?? "",
+    offlineFormNumber: reg.offlineFormNumber ?? reg.offline_form_number ?? "",
     sr_no: reg.srNo ?? reg.sr_no,
     application_date: reg.applicationDate ?? reg.application_date,
+    applicationDate: reg.applicationDate ?? reg.application_date,
     applicant_name: reg.applicantName ?? reg.applicant_name,
+    applicantName: reg.applicantName ?? reg.applicant_name,
     father_name: reg.fatherName ?? reg.father_name,
+    fatherName: reg.fatherName ?? reg.father_name,
     mother_name: reg.motherName ?? reg.mother_name,
+    motherName: reg.motherName ?? reg.mother_name,
     date_of_birth: reg.dateOfBirth ?? reg.date_of_birth,
+    dateOfBirth: reg.dateOfBirth ?? reg.date_of_birth,
     aadhar_number: reg.aadharNumber ?? reg.aadhar_number,
+    aadharNumber: reg.aadharNumber ?? reg.aadhar_number,
     pin_code: reg.pinCode ?? reg.pin_code,
+    pinCode: reg.pinCode ?? reg.pin_code,
     nominee_name: reg.nomineeName ?? reg.nominee_name,
+    nomineeName: reg.nomineeName ?? reg.nominee_name,
     nomineeFatherName: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
     nomineeFathername: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
     nominee_father_name: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
@@ -311,10 +393,34 @@ export function mapMayraApplicationRecord(reg: Record<string, any>) {
     age: reg.age ?? calculateAgeFromDateOfBirth(reg.dateOfBirth ?? reg.date_of_birth),
     is_active: isActive ? 1 : 0,
     isActive,
-    added_name: reg.added_name ?? addedBy.name ?? "",
+    added_name: workerName,
     added_mobile: reg.added_mobile ?? addedBy.mobile ?? "",
-    workerName: reg.workerName ?? addedBy.name ?? "",
-    workerMobile: reg.workerMobile ?? addedBy.mobile ?? "",
+    workerName,
+    karyakartaName,
+    workerMobile,
+    workerCode,
+    worker_code: workerCode,
+    karyakartaCode,
+    agentCode: workerCode,
+    agent_code: workerCode,
+    workerOfflineFormNumber,
+    worker_offline_form_number: workerOfflineFormNumber,
+    agentOfflineFormNumber: workerOfflineFormNumber,
+    agent_offline_form_number: workerOfflineFormNumber,
+    seniorCode,
+    senior_code: seniorCode,
+    uplineCode: seniorCode,
+    upline_code: seniorCode,
+    seniorOfflineFormNumber,
+    senior_offline_form_number: seniorOfflineFormNumber,
+    seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+    senior_agent_offline_form_number: seniorOfflineFormNumber,
+    seniorName,
+    senior_name: seniorName,
+    seniorWorker: seniorName,
+    senior_worker: seniorName,
+    parentAgentId: reg.parentAgentId ?? reg.parent_agent_id ?? null,
+    parent_agent_id: reg.parentAgentId ?? reg.parent_agent_id ?? null,
     addedby_id: reg.addedById ?? reg.addedby_id,
     addedById: reg.addedById ?? reg.addedby_id,
   };
@@ -707,6 +813,70 @@ export function mapAgentRecord(record: Record<string, any>) {
   if (!record || typeof record !== "object") return record;
 
   const profile = record.agentProfile ?? record.agent_profile ?? {};
+  const parentAgentId =
+    record.parentAgentId ??
+    record.parent_agent_id ??
+    profile.parentAgentId ??
+    profile.parent_agent_id ??
+    null;
+
+  const seniorCode =
+    record.seniorCode ??
+    profile.seniorCode ??
+    (record.role === "ADMIN" ? "ADMIN" : "ADMIN");
+
+  const seniorName =
+    record.seniorName ??
+    profile.seniorName ??
+    (record.role === "ADMIN" ? (record.name || "Super Admin") : "Super Admin");
+
+  const seniorOfflineFormNumber =
+    record.seniorOfflineFormNumber ??
+    record.senior_offline_form_number ??
+    profile.seniorOfflineFormNumber ??
+    profile.senior_offline_form_number ??
+    record.parentOfflineFormNumber ??
+    profile.parentOfflineFormNumber ??
+    (seniorCode !== "ADMIN" ? seniorCode : null);
+
+  const seniorEmployeeId =
+    record.seniorEmployeeId ??
+    record.senior_employee_id ??
+    profile.seniorEmployeeId ??
+    profile.senior_employee_id ??
+    record.parentEmployeeId ??
+    profile.parentEmployeeId ??
+    null;
+
+  const parentName =
+    record.parentName ??
+    record.parent_name ??
+    profile.parentName ??
+    profile.parent_name ??
+    null;
+
+  const level = record.level ?? profile.level ?? (parentAgentId ? "LEVEL_2" : "LEVEL_1");
+
+  const enrichedProfile = {
+    ...profile,
+    id: profile.id ?? record.id ?? "",
+    userId: profile.userId ?? profile.user_id ?? record.id ?? "",
+    employeeId: profile.employeeId ?? profile.employee_id ?? record.employee_id ?? "",
+    offlineFormNumber: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
+    offline_form_number: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
+    parentAgentId,
+    parent_agent_id: parentAgentId,
+    seniorId: parentAgentId,
+    senior_id: parentAgentId,
+    seniorEmployeeId,
+    senior_employee_id: seniorEmployeeId,
+    seniorOfflineFormNumber,
+    senior_offline_form_number: seniorOfflineFormNumber,
+    seniorCode,
+    seniorName,
+    parentName,
+    level,
+  };
 
   return {
     id: record.id ?? "",
@@ -718,6 +888,7 @@ export function mapAgentRecord(record: Record<string, any>) {
         record.created_at,
     ),
     employee_id: profile.employeeId ?? profile.employee_id ?? record.employee_id ?? "",
+    employeeId: profile.employeeId ?? profile.employee_id ?? record.employee_id ?? "",
     offlineFormNumber: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
     offline_form_number: profile.offlineFormNumber ?? profile.offline_form_number ?? record.offlineFormNumber ?? record.offline_form_number ?? null,
     name: record.name ?? "",
@@ -744,6 +915,23 @@ export function mapAgentRecord(record: Record<string, any>) {
     profile_image:
       profile.profileImageUrl ?? profile.profile_image_url ?? profile.profile_image ?? record.profile_image ?? "",
     createdAt: formatCompatDate(record.createdAt ?? record.created_at),
+    level,
+    seniorCode,
+    seniorName,
+    parentAgentId,
+    parent_agent_id: parentAgentId,
+    seniorId: parentAgentId,
+    senior_id: parentAgentId,
+    seniorEmployeeId,
+    senior_employee_id: seniorEmployeeId,
+    parentEmployeeId: seniorEmployeeId,
+    parent_employee_id: seniorEmployeeId,
+    seniorOfflineFormNumber,
+    senior_offline_form_number: seniorOfflineFormNumber,
+    parentName,
+    parent_name: parentName,
+    agentProfile: enrichedProfile,
+    agent_profile: enrichedProfile,
   };
 }
 

@@ -1,6 +1,6 @@
 import { prisma, PRISMA_TX_OPTIONS, PrismaTransactionClient } from "../../config/db";
 import { NotFoundError, BadRequestError } from "../../utils/errors";
-import { isValidUuid } from "../../utils/compat-helpers";
+import { isValidUuid, resolveAgentSeniorHierarchyBatch } from "../../utils/compat-helpers";
 import {
   normalizeListFilters,
   applyAddressContains,
@@ -284,7 +284,21 @@ export class MayraService {
         where: { id: { in: ids } },
         include: {
           addedBy: {
-            select: { id: true, name: true, mobile: true },
+            select: {
+              id: true,
+              name: true,
+              mobile: true,
+              role: true,
+              agentProfile: {
+                select: {
+                  id: true,
+                  employeeId: true,
+                  offlineFormNumber: true,
+                  workArea: true,
+                  designation: true,
+                },
+              },
+            },
           },
           mayraCongrats: true,
           installments: {
@@ -293,6 +307,48 @@ export class MayraService {
         },
       })
     );
+
+    // Batch resolve senior hierarchy for all Mayra registrations
+    const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
+    for (const r of records as any[]) {
+      const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
+      const isAdmin = r.addedBy?.role === "ADMIN";
+      const agentEmployeeId = r.addedBy?.agentProfile?.employeeId || "";
+      const workerOfflineFormNumber = r.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = r.workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      r.workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      r.workerName = r.workerName || r.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      r.workerMobile = r.workerMobile || r.addedBy?.mobile || "";
+      r.workerOfflineFormNumber = workerOfflineFormNumber || "";
+      r.agentOfflineFormNumber = workerOfflineFormNumber || "";
+
+      if (hierarchy) {
+        r.seniorCode = hierarchy.seniorCode;
+        r.seniorName = hierarchy.seniorName;
+        r.seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        r.seniorAgentOfflineFormNumber = r.seniorOfflineFormNumber;
+        r.parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        r.seniorCode = "ADMIN";
+        r.seniorName = r.addedBy?.name || "Super Admin";
+        r.seniorOfflineFormNumber = "";
+        r.seniorAgentOfflineFormNumber = "";
+        r.parentAgentId = null;
+      } else {
+        r.seniorCode = "ADMIN";
+        r.seniorName = "Super Admin";
+        r.seniorOfflineFormNumber = "";
+        r.seniorAgentOfflineFormNumber = "";
+        r.parentAgentId = null;
+      }
+      r.uplineCode = r.seniorCode;
+      r.seniorWorker = r.seniorName;
+    }
 
     if (page !== undefined && limit !== undefined) {
       return {
@@ -316,7 +372,21 @@ export class MayraService {
       where: { id, deletedAt: null },
       include: {
         addedBy: {
-          select: { id: true, name: true, mobile: true },
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            role: true,
+            agentProfile: {
+              select: {
+                id: true,
+                employeeId: true,
+                offlineFormNumber: true,
+                workArea: true,
+                designation: true,
+              },
+            },
+          },
         },
         installments: {
           orderBy: { date: "asc" },
@@ -333,6 +403,46 @@ export class MayraService {
 
     if (!reg) {
       throw new NotFoundError("Mayra Registration not found");
+    }
+
+    if (reg.addedById) {
+      const hierarchyMap = await resolveAgentSeniorHierarchyBatch([reg.addedById]);
+      const hierarchy = hierarchyMap.get(reg.addedById);
+      const isAdmin = reg.addedBy?.role === "ADMIN";
+      const agentEmployeeId = reg.addedBy?.agentProfile?.employeeId || "";
+      const workerOfflineFormNumber = reg.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = (reg as any).workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      (reg as any).workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      (reg as any).workerName = reg.workerName || reg.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      (reg as any).workerMobile = reg.workerMobile || reg.addedBy?.mobile || "";
+      (reg as any).workerOfflineFormNumber = workerOfflineFormNumber || "";
+      (reg as any).agentOfflineFormNumber = workerOfflineFormNumber || "";
+
+      if (hierarchy) {
+        (reg as any).seniorCode = hierarchy.seniorCode;
+        (reg as any).seniorName = hierarchy.seniorName;
+        (reg as any).seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        (reg as any).seniorAgentOfflineFormNumber = (reg as any).seniorOfflineFormNumber;
+        (reg as any).parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        (reg as any).seniorCode = "ADMIN";
+        (reg as any).seniorName = reg.addedBy?.name || "Super Admin";
+        (reg as any).seniorOfflineFormNumber = "";
+        (reg as any).seniorAgentOfflineFormNumber = "";
+        (reg as any).parentAgentId = null;
+      } else {
+        (reg as any).seniorCode = "ADMIN";
+        (reg as any).seniorName = "Super Admin";
+        (reg as any).seniorOfflineFormNumber = "";
+        (reg as any).seniorAgentOfflineFormNumber = "";
+        (reg as any).parentAgentId = null;
+      }
+      (reg as any).uplineCode = (reg as any).seniorCode;
+      (reg as any).seniorWorker = (reg as any).seniorName;
     }
 
     return reg;

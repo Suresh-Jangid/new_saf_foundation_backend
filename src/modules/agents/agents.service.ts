@@ -86,15 +86,17 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
   const level = h?.level || "LEVEL_1";
   const parentAgentId = h?.parentAgentId || null;
   const parentEmployeeId = h?.parentEmployeeId || (level === "LEVEL_2" ? h?.seniorCode : null) || null;
+  const parentOfflineFormNumber = h?.parentOfflineFormNumber || h?.seniorOfflineFormNumber || null;
   const parentName = h?.parentName || (level === "LEVEL_2" ? h?.seniorName : null) || null;
-  const seniorCode = h?.seniorCode || "ADMIN";
-  const seniorName = h?.seniorName || "Super Admin";
+  const seniorCode = h?.seniorCode || parentOfflineFormNumber || (level === "LEVEL_2" ? parentEmployeeId : "ADMIN") || "ADMIN";
+  const seniorName = h?.seniorName || (level === "LEVEL_2" ? (parentName || "Senior Agent") : "Super Admin");
   const canCreateSubAgent = h?.canCreateSubAgent ?? (level === "LEVEL_1");
 
   const hierarchy = {
     level,
     parentAgentId,
     parentEmployeeId,
+    parentOfflineFormNumber,
     parentName,
     seniorCode,
     seniorName,
@@ -119,6 +121,8 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
         senior_id: parentAgentId,
         seniorEmployeeId: parentEmployeeId,
         senior_employee_id: parentEmployeeId,
+        seniorOfflineFormNumber: parentOfflineFormNumber,
+        senior_offline_form_number: parentOfflineFormNumber,
         seniorCode,
         seniorName,
         level,
@@ -140,7 +144,10 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
     senior_id: parentAgentId,
     seniorEmployeeId: parentEmployeeId,
     senior_employee_id: parentEmployeeId,
+    seniorOfflineFormNumber: parentOfflineFormNumber,
+    senior_offline_form_number: parentOfflineFormNumber,
     parentEmployeeId,
+    parentOfflineFormNumber,
     parentName,
     hierarchy,
   };
