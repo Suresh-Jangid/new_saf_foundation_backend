@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AgentsController } from "./agents.controller";
 import { authenticate, authorizeRoles } from "../../middlewares/auth";
+import { checkPermission } from "../../middlewares/rbac";
 import { validateRequest } from "../../middlewares/validation";
 import { createAgentSchema, updateAgentSchema, updatePermissionsSchema } from "./agents.schema";
 
@@ -13,17 +14,17 @@ router.use(authenticate as any);
 // Retrieve all agents
 router.get("/", controller.getAllAgents.bind(controller));
 
-// Retrieve eligible Senior Agents for dropdown (LEVEL-1 only)
+// Retrieve eligible Senior Agents for dropdown
 router.get("/seniors/eligible", controller.getEligibleSeniors.bind(controller));
 router.get("/eligible-seniors", controller.getEligibleSeniors.bind(controller));
 
 // Retrieve single agent
 router.get("/:id", controller.getAgentById.bind(controller));
 
-// Register a new agent (Admin Only)
+// Register a new agent (Admin or Authorized Agent with agent_registration create permission)
 router.post(
   "/",
-  authorizeRoles("ADMIN") as any,
+  checkPermission("agent_registration", "create") as any,
   validateRequest(createAgentSchema),
   controller.createAgent.bind(controller)
 );

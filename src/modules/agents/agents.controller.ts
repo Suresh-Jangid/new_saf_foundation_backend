@@ -10,7 +10,8 @@ export class AgentsController {
   public async createAgent(req: Request, res: Response, next: NextFunction) {
     try {
       const creatorId = (req as any).user?.id || (req as any).user?.userId;
-      const result = await agentsService.createAgent(req.body, creatorId);
+      const creatorRole = (req as any).user?.role;
+      const result = await agentsService.createAgent(req.body, creatorId, creatorRole);
       res.status(201).json({
         success: true,
         message: "Agent registered successfully",
@@ -22,12 +23,14 @@ export class AgentsController {
   }
 
   /**
-   * Retrieve eligible Senior Agents for dropdown (LEVEL-1 only)
+   * Retrieve eligible Senior Agents for dropdown
    */
   public async getEligibleSeniors(req: Request, res: Response, next: NextFunction) {
     try {
       const excludeId = (req.query.excludeId || req.query.exclude_id || req.query.id) as string | undefined;
-      const result = await agentsService.getEligibleSeniors(excludeId);
+      const callerId = (req as any).user?.id || (req as any).user?.userId;
+      const callerRole = (req as any).user?.role;
+      const result = await agentsService.getEligibleSeniors(excludeId, callerId, callerRole);
       res.status(200).json({
         success: true,
         data: result,

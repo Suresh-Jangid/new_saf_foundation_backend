@@ -83,14 +83,14 @@ function buildAgentProfileExtras(data: Record<string, any>) {
 }
 
 function enrichAgentWithHierarchy(agent: any, h: any) {
-  const level = h?.level || "LEVEL_1";
+  const level = h?.level !== undefined ? (typeof h.level === "number" ? h.level : (parseInt(String(h.level).replace(/\D/g, ""), 10) || 1)) : 1;
   const parentAgentId = h?.parentAgentId || null;
-  const parentEmployeeId = h?.parentEmployeeId || (level === "LEVEL_2" ? h?.seniorCode : null) || null;
+  const parentEmployeeId = h?.parentEmployeeId || null;
   const parentOfflineFormNumber = h?.parentOfflineFormNumber || h?.seniorOfflineFormNumber || null;
-  const parentName = h?.parentName || (level === "LEVEL_2" ? h?.seniorName : null) || null;
-  const seniorCode = h?.seniorCode || parentOfflineFormNumber || (level === "LEVEL_2" ? parentEmployeeId : "ADMIN") || "ADMIN";
-  const seniorName = h?.seniorName || (level === "LEVEL_2" ? (parentName || "Senior Agent") : "Super Admin");
-  const canCreateSubAgent = h?.canCreateSubAgent ?? (level === "LEVEL_1");
+  const parentName = h?.parentName || null;
+  const seniorCode = h?.seniorCode || parentOfflineFormNumber || parentEmployeeId || "ADMIN";
+  const seniorName = h?.seniorName || (parentAgentId ? (parentName || "Senior Agent") : "Super Admin");
+  const canCreateSubAgent = true;
 
   const hierarchy = {
     level,
@@ -156,10 +156,11 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
 export class AgentsService {
   /**
    * Resolves and validates senior selection for Agent Hierarchy.
-   * Strict 2-Level Depth Rule:
-   * Level 1 = Senior Agent (reports to Admin, parent_agent_id is null)
-   * Level 2 = Sub-Agent (reports to Level 1 Senior)
-   * A Level-2 Agent can NEVER be a Senior and can NEVER have child agents.
+   * Unlimited Depth Rule:
+   * Any active, non-deleted agent can be assigned as a Senior.
+   * Direct Under Admin: parent_agent_id is null, level = 1
+   * Under Senior: parent_agent_id = Senior userId, level = Senior level + 1
+   * Cycle protection prevents assigning an agent as their own senior or under their descendants.
    */
   private async resolveAndValidateSenior(
     tx: any,
@@ -223,18 +224,28 @@ export class AgentsService {
       throw new BadRequestError("An agent cannot be assigned as their own Senior.");
     }
 
-    // Check if the selected Senior is already a Level-2 Agent (Maximum Depth = 2 Rule)
-    const seniorHierarchy = (await tx.$queryRawUnsafe(
-      `SELECT level::text as level, parent_agent_id FROM agent_hierarchies WHERE agent_id = $1::uuid`,
-      seniorUser.id
-    )) as Array<{ level: string; parent_agent_id: string | null }>;
+    // Cycle Protection: Check if currentAgentId is in the ancestor chain of the selected senior
+    if (currentAgentId && isValidUuid(currentAgentId)) {
+      const cycleCheck = (await tx.$queryRawUnsafe(
+        `WITH RECURSIVE parent_ancestors AS (
+           SELECT agent_id, parent_agent_id
+           FROM agent_hierarchies
+           WHERE agent_id = $1::uuid
+           UNION ALL
+           SELECT ah.agent_id, ah.parent_agent_id
+           FROM agent_hierarchies ah
+           JOIN parent_ancestors pa ON ah.agent_id = pa.parent_agent_id
+         )
+         SELECT 1 AS cycle_detected
+         FROM parent_ancestors
+         WHERE agent_id = $2::uuid
+         LIMIT 1`,
+        seniorUser.id,
+        currentAgentId
+      )) as Array<{ cycle_detected: number }>;
 
-    if (seniorHierarchy.length > 0) {
-      const sh = seniorHierarchy[0];
-      if (sh.level === "LEVEL_2" || sh.parent_agent_id !== null) {
-        throw new BadRequestError(
-          "केवल Senior Agent के नीचे Agent जोड़ा जा सकता है। Agent के नीचे दूसरा Agent नहीं जोड़ा जा सकता। (An agent can only be added under a Senior Agent. A Level-2 Agent cannot have another Agent under them.)"
-        );
+      if (cycleCheck && cycleCheck.length > 0) {
+        throw new BadRequestError("Cannot assign descendant as parent; circular hierarchy detected.");
       }
     }
 
@@ -246,10 +257,13 @@ export class AgentsService {
   }
 
   /**
-   * Retrieve list of eligible Level-1 Senior Agents for dropdown selection.
-   * Only active, non-deleted, LEVEL-1 agents (parent_agent_id = null) are returned.
+   * Retrieve list of eligible Senior Agents for dropdown selection.
+   * All active, non-deleted agents are returned with their true dynamic hierarchy level.
+   * If excludeAgentId is provided, that agent and all their descendants are excluded to prevent cycles.
    */
-  public async getEligibleSeniors(excludeAgentId?: string) {
+  public async getEligibleSeniors(excludeAgentId?: string, _callerId?: string, _callerRole?: string) {
+    const hasValidExclude = Boolean(excludeAgentId && isValidUuid(excludeAgentId));
+    
     const rows = await prisma.$queryRawUnsafe<
       Array<{
         id: string;
@@ -260,26 +274,41 @@ export class AgentsService {
         district: string;
         work_area: string;
         father_name: string;
+        level: number | string;
       }>
     >(
-      `SELECT 
-         u.id,
-         u.name,
-         u.mobile,
-         ap.employee_id,
-         ap.village,
-         ap.district,
-         ap.work_area,
-         ap.father_name
-       FROM users u
-       JOIN agent_profiles ap ON ap.user_id = u.id AND ap.deleted_at IS NULL
-       LEFT JOIN agent_hierarchies ah ON ah.agent_id = u.id
-       WHERE u.role = 'AGENT'
-         AND u.is_active = true
-         AND u.deleted_at IS NULL
-         AND (ah.id IS NULL OR (ah.level = 'LEVEL_1' AND ah.parent_agent_id IS NULL))
-         ${excludeAgentId && isValidUuid(excludeAgentId) ? `AND u.id != '${excludeAgentId}'::uuid` : ""}
-       ORDER BY u.name ASC`
+      `WITH RECURSIVE ${hasValidExclude ? `excluded_subtree AS (
+         SELECT agent_id FROM agent_hierarchies WHERE agent_id = '${excludeAgentId}'::uuid
+         UNION ALL
+         SELECT ah.agent_id FROM agent_hierarchies ah JOIN excluded_subtree es ON ah.parent_agent_id = es.agent_id
+       ),` : ""}
+       hierarchy_tree AS (
+         SELECT agent_id, parent_agent_id, 1 AS depth
+         FROM agent_hierarchies
+         WHERE parent_agent_id IS NULL
+         UNION ALL
+         SELECT ah.agent_id, ah.parent_agent_id, ht.depth + 1 AS depth
+         FROM agent_hierarchies ah
+         JOIN hierarchy_tree ht ON ah.parent_agent_id = ht.agent_id
+       )
+       SELECT 
+          u.id,
+          u.name,
+          u.mobile,
+          ap.employee_id,
+          ap.village,
+          ap.district,
+          ap.work_area,
+          ap.father_name,
+          coalesce(ht.depth, 1) as level
+        FROM users u
+        JOIN agent_profiles ap ON ap.user_id = u.id AND ap.deleted_at IS NULL
+        LEFT JOIN hierarchy_tree ht ON ht.agent_id = u.id
+        WHERE u.role = 'AGENT'
+          AND u.is_active = true
+          AND u.deleted_at IS NULL
+          ${hasValidExclude ? `AND u.id NOT IN (SELECT agent_id FROM excluded_subtree) AND u.id != '${excludeAgentId}'::uuid` : ""}
+        ORDER BY u.name ASC`
     );
 
     return rows.map((r) => ({
@@ -288,7 +317,7 @@ export class AgentsService {
       name: r.name,
       employeeId: r.employee_id,
       mobile: r.mobile,
-      level: "LEVEL_1" as const,
+      level: Number(r.level) || 1,
       village: r.village,
       district: r.district,
       workArea: r.work_area,
@@ -298,8 +327,11 @@ export class AgentsService {
 
   /**
    * Register a new Agent
+   * Supports Unlimited Hierarchy Depth:
+   * - Admin can create root Level 1 Senior OR create child under any valid active Agent.
+   * - Authenticated Agent creates a child strictly under themselves (derived from auth token).
    */
-  public async createAgent(data: any, creatorId?: string) {
+  public async createAgent(data: any, creatorId?: string, creatorRole?: string) {
     if (!data.mobile || !data.password || !data.name || !data.fatherName || !data.gender) {
       throw new BadRequestError("Name, mobile, password, father name, and gender are required.");
     }
@@ -317,14 +349,6 @@ export class AgentsService {
 
     const age = Number(data.age) || 25;
 
-    const rawSenior =
-      data.seniorEmployeeId ??
-      data.senior_employee_id ??
-      data.seniorId ??
-      data.senior_id ??
-      data.parentAgentId ??
-      data.parent_agent_id;
-
     const rawOffline = data.offlineFormNumber ?? data.offline_form_number;
     const cleanOffline =
       rawOffline !== undefined && rawOffline !== null && String(rawOffline).trim() !== ""
@@ -332,8 +356,40 @@ export class AgentsService {
         : null;
 
     return prisma.$transaction(async (tx) => {
-      // Validate Senior Agent selection before creating
-      const selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior);
+      let selectedSenior: { id: string; employeeId: string; name: string } | null = null;
+
+      // Phase 6: Server-side parent enforcement for AGENT role
+      if (creatorRole === "AGENT" && creatorId && isValidUuid(creatorId)) {
+        const creatorUser = await tx.user.findFirst({
+          where: { id: creatorId, role: Role.AGENT, deletedAt: null },
+          include: { agentProfile: true },
+        });
+
+        if (!creatorUser) {
+          throw new BadRequestError("Authenticated creator Agent not found or is deleted.");
+        }
+        if (!creatorUser.isActive) {
+          throw new BadRequestError("Authenticated creator Agent is inactive and cannot register sub-agents.");
+        }
+
+        // Lock direct parent to authenticated Agent (prevents parent spoofing)
+        selectedSenior = {
+          id: creatorUser.id,
+          employeeId: creatorUser.agentProfile?.employeeId || "",
+          name: creatorUser.name,
+        };
+      } else {
+        // Admin or system creation: resolve Senior from request payload
+        const rawSenior =
+          data.seniorEmployeeId ??
+          data.senior_employee_id ??
+          data.seniorId ??
+          data.senior_id ??
+          data.parentAgentId ??
+          data.parent_agent_id;
+
+        selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior);
+      }
 
       // Duplicate check for offlineFormNumber among active non-deleted agents
       if (cleanOffline) {
@@ -417,18 +473,36 @@ export class AgentsService {
 
       await Promise.all(permissionPromises);
 
-      // Strict 2-Level Hierarchy Creation:
-      // If no Senior is selected -> LEVEL_1 (parent_agent_id = NULL, can_create_sub_agent = true)
-      // If Level-1 Senior is selected -> LEVEL_2 (parent_agent_id = Senior userId, can_create_sub_agent = false)
-      const targetLevel = selectedSenior ? "LEVEL_2" : "LEVEL_1";
-      const parentAgentId = selectedSenior ? selectedSenior.id : null;
-      const canCreateSubAgent = targetLevel === "LEVEL_1";
+      // Calculate Dynamic Level based on Parent's depth in hierarchy
+      let targetLevel = 1;
+      let parentAgentId: string | null = null;
 
+      if (selectedSenior) {
+        parentAgentId = selectedSenior.id;
+        const parentDepthResult = (await tx.$queryRawUnsafe(
+          `WITH RECURSIVE ancestor_chain AS (
+             SELECT agent_id, parent_agent_id, 1 AS depth
+             FROM agent_hierarchies
+             WHERE agent_id = $1::uuid
+             UNION ALL
+             SELECT ah.agent_id, ah.parent_agent_id, ac.depth + 1
+             FROM agent_hierarchies ah
+             JOIN ancestor_chain ac ON ah.agent_id = ac.parent_agent_id
+           )
+           SELECT coalesce(max(depth), 1) as level FROM ancestor_chain`,
+          selectedSenior.id
+        )) as Array<{ level: number | string }>;
+
+        const parentLevel = Number(parentDepthResult[0]?.level || 1);
+        targetLevel = parentLevel + 1;
+      }
+
+      const canCreateSubAgent = true;
       const resolvedCreatorId = creatorId && isValidUuid(creatorId) ? creatorId : user.id;
 
       await tx.$executeRawUnsafe(
         `INSERT INTO agent_hierarchies (id, agent_id, parent_agent_id, level, can_create_sub_agent, created_by_id, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::"AgentHierarchyLevel", $4, $5::uuid, NOW(), NOW())
+         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3, $4, $5::uuid, NOW(), NOW())
          ON CONFLICT (agent_id) DO UPDATE SET
            parent_agent_id = EXCLUDED.parent_agent_id,
            level = EXCLUDED.level,
@@ -436,7 +510,7 @@ export class AgentsService {
            updated_at = NOW()`,
         user.id,
         parentAgentId,
-        targetLevel,
+        `LEVEL_${targetLevel}`,
         canCreateSubAgent,
         resolvedCreatorId
       );
@@ -456,7 +530,7 @@ export class AgentsService {
         parentName: selectedSenior ? selectedSenior.name : null,
         seniorCode,
         seniorName,
-        canCreateSubAgent,
+        canCreateSubAgent: true,
       });
     }, PRISMA_TX_OPTIONS);
   }
@@ -581,9 +655,6 @@ export class AgentsService {
 
     profileFields.forEach(({ key, sources }) => {
       for (const source of sources) {
-        // Blank values mean "unchanged" (matches buildAgentProfileExtras),
-        // otherwise an empty string from an unedited field would wipe out
-        // previously saved data (e.g. nominee details) on every re-save.
         if (data[source] !== undefined && data[source] !== null && data[source] !== "") {
           profileUpdates[key] = data[source];
           break;
@@ -652,20 +723,6 @@ export class AgentsService {
       if (hasSeniorUpdate) {
         shouldUpdateHierarchy = true;
         selectedSenior = await this.resolveAndValidateSenior(tx, rawSenior, id);
-
-        // If placing this agent under another agent (Level-2), verify they don't have sub-agents
-        if (selectedSenior) {
-          const childCountResult = (await tx.$queryRawUnsafe(
-            `SELECT count(*) as count FROM agent_hierarchies WHERE parent_agent_id = $1::uuid`,
-            id
-          )) as Array<{ count: bigint }>;
-          const childCount = Number(childCountResult[0]?.count || 0);
-          if (childCount > 0) {
-            throw new BadRequestError(
-              "A Level-1 Senior cannot be placed under another Agent because they already have sub-agents. This would violate the maximum depth rule of 2 levels."
-            );
-          }
-        }
       }
 
       await tx.user.update({
@@ -686,14 +743,34 @@ export class AgentsService {
       }
 
       if (shouldUpdateHierarchy) {
-        const targetLevel = selectedSenior ? "LEVEL_2" : "LEVEL_1";
+        let targetLevel = 1;
         const parentAgentId = selectedSenior ? selectedSenior.id : null;
-        const canCreateSubAgent = targetLevel === "LEVEL_1";
+
+        if (selectedSenior) {
+          const parentDepthResult = (await tx.$queryRawUnsafe(
+            `WITH RECURSIVE ancestor_chain AS (
+               SELECT agent_id, parent_agent_id, 1 AS depth
+               FROM agent_hierarchies
+               WHERE agent_id = $1::uuid
+               UNION ALL
+               SELECT ah.agent_id, ah.parent_agent_id, ac.depth + 1
+               FROM agent_hierarchies ah
+               JOIN ancestor_chain ac ON ah.agent_id = ac.parent_agent_id
+             )
+             SELECT coalesce(max(depth), 1) as level FROM ancestor_chain`,
+            selectedSenior.id
+          )) as Array<{ level: number | string }>;
+
+          const parentLevel = Number(parentDepthResult[0]?.level || 1);
+          targetLevel = parentLevel + 1;
+        }
+
+        const canCreateSubAgent = true;
         const resolvedCreatorId = modifierId && isValidUuid(modifierId) ? modifierId : id;
 
         await tx.$executeRawUnsafe(
           `INSERT INTO agent_hierarchies (id, agent_id, parent_agent_id, level, can_create_sub_agent, created_by_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::"AgentHierarchyLevel", $4, $5::uuid, NOW(), NOW())
+           VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3, $4, $5::uuid, NOW(), NOW())
            ON CONFLICT (agent_id) DO UPDATE SET
              parent_agent_id = EXCLUDED.parent_agent_id,
              level = EXCLUDED.level,
@@ -701,9 +778,31 @@ export class AgentsService {
              updated_at = NOW()`,
           id,
           parentAgentId,
-          targetLevel,
+          `LEVEL_${targetLevel}`,
           canCreateSubAgent,
           resolvedCreatorId
+        );
+
+        // Transactionally update depths for all downstream descendants
+        await tx.$executeRawUnsafe(
+          `WITH RECURSIVE subtree AS (
+             SELECT agent_id, parent_agent_id, $1::int as new_depth
+             FROM agent_hierarchies
+             WHERE agent_id = $2::uuid
+             UNION ALL
+             SELECT ah.agent_id, ah.parent_agent_id, s.new_depth + 1
+             FROM agent_hierarchies ah
+             JOIN subtree s ON ah.parent_agent_id = s.agent_id
+           )
+           UPDATE agent_hierarchies ah
+           SET 
+             level = ('LEVEL_' || s.new_depth),
+             can_create_sub_agent = true,
+             updated_at = NOW()
+           FROM subtree s
+           WHERE ah.agent_id = s.agent_id`,
+          targetLevel,
+          id
         );
       }
 

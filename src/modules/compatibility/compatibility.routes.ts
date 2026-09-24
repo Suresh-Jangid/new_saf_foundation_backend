@@ -704,12 +704,24 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
 
       // ── AGENTS ──
       case "addAgent": {
-        const result = await agentsService.createAgent(payload);
+        if (!(await hasAgentPermission(user, "agent_registration", "create"))) {
+          return res.status(200).json({ error: true, message: "Unauthorized - Access denied to Agent Registration" });
+        }
+        const result = await agentsService.createAgent(payload, user?.userId, user?.role);
         return res.json({
           status: true,
           error: false,
           message: "Agent created successfully",
           data: mapAgentRecord(result as Record<string, any>),
+        });
+      }
+
+      case "getEligibleSeniors": {
+        const result = await agentsService.getEligibleSeniors(payload.excludeId || payload.exclude_id || payload.id, user?.userId, user?.role);
+        return res.json({
+          status: true,
+          error: false,
+          data: result,
         });
       }
 

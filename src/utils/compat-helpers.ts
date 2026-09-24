@@ -98,7 +98,7 @@ export interface ResolvedHierarchySenior {
   seniorCode: string;
   seniorName: string;
   seniorOfflineFormNumber?: string | null;
-  level?: "LEVEL_1" | "LEVEL_2";
+  level?: string | number;
   parentAgentId?: string | null;
   parentEmployeeId?: string | null;
   parentOfflineFormNumber?: string | null;
@@ -108,10 +108,10 @@ export interface ResolvedHierarchySenior {
 
 /**
  * Efficiently batch-resolves senior hierarchy for a list of agent user IDs.
- * Rules:
- * - Level 1 Agent (parent_agent_id is null): reports to ADMIN (Code: 'ADMIN', Name: creator admin or 'Super Admin')
- * - Level 2 Agent (parent_agent_id present): reports to Senior Agent (Code: parent offlineFormNumber or employeeId, Name: parent name)
- * - Admin (role ADMIN): Code: 'ADMIN', Name: user.name or 'Super Admin'
+ * Unlimited Hierarchy Rules:
+ * - Level 1 Agent (parent_agent_id is null): reports to ADMIN (Code: 'ADMIN', Name: creator admin or 'Super Admin', level: 1)
+ * - Level N Agent (parent_agent_id present): reports to direct Senior Agent (Code: parent offlineFormNumber or employeeId, Name: parent name, level: N)
+ * - canCreateSubAgent is true for all active agents.
  */
 export async function resolveAgentSeniorHierarchyBatch(
   agentUserIds: string[]
@@ -127,7 +127,7 @@ export async function resolveAgentSeniorHierarchyBatch(
       Array<{
         agent_id: string;
         parent_agent_id: string | null;
-        level: string | null;
+        depth: number | string | null;
         can_create_sub_agent: boolean | null;
         parent_employee_id: string | null;
         parent_offline_form_number: string | null;
@@ -135,54 +135,68 @@ export async function resolveAgentSeniorHierarchyBatch(
         creator_name: string | null;
       }>
     >(
-      `SELECT 
-         ah.agent_id,
-         ah.parent_agent_id,
-         ah.level::text as level,
-         ah.can_create_sub_agent,
-         parent_ap.employee_id AS parent_employee_id,
-         parent_ap.offline_form_number AS parent_offline_form_number,
-         parent_u.name AS parent_name,
-         creator_u.name AS creator_name
-       FROM agent_hierarchies ah
-       LEFT JOIN agent_profiles parent_ap ON (parent_ap.user_id = ah.parent_agent_id OR parent_ap.id = ah.parent_agent_id) AND parent_ap.deleted_at IS NULL
-       LEFT JOIN users parent_u ON (parent_u.id = ah.parent_agent_id OR parent_u.id = parent_ap.user_id) AND parent_u.deleted_at IS NULL
-       LEFT JOIN users creator_u ON creator_u.id = ah.created_by_id AND creator_u.deleted_at IS NULL
-       WHERE ah.agent_id = ANY($1::uuid[])`,
+      `WITH RECURSIVE hierarchy_tree AS (
+         SELECT agent_id, parent_agent_id, 1 AS depth
+         FROM agent_hierarchies
+         WHERE parent_agent_id IS NULL
+
+         UNION ALL
+
+         SELECT ah.agent_id, ah.parent_agent_id, ht.depth + 1 AS depth
+         FROM agent_hierarchies ah
+         JOIN hierarchy_tree ht ON ah.parent_agent_id = ht.agent_id
+       )
+       SELECT 
+          ah.agent_id,
+          ah.parent_agent_id,
+          coalesce(ht.depth, 1) as depth,
+          ah.can_create_sub_agent,
+          parent_ap.employee_id AS parent_employee_id,
+          parent_ap.offline_form_number AS parent_offline_form_number,
+          parent_u.name AS parent_name,
+          creator_u.name AS creator_name
+        FROM agent_hierarchies ah
+        LEFT JOIN hierarchy_tree ht ON ht.agent_id = ah.agent_id
+        LEFT JOIN agent_profiles parent_ap ON (parent_ap.user_id = ah.parent_agent_id OR parent_ap.id = ah.parent_agent_id) AND parent_ap.deleted_at IS NULL
+        LEFT JOIN users parent_u ON (parent_u.id = ah.parent_agent_id OR parent_u.id = parent_ap.user_id) AND parent_u.deleted_at IS NULL
+        LEFT JOIN users creator_u ON creator_u.id = ah.created_by_id AND creator_u.deleted_at IS NULL
+        WHERE ah.agent_id = ANY($1::uuid[])`,
       validIds
     );
 
     for (const row of rows) {
+      const calculatedDepth = Number(row.depth) || 1;
+
       if (row.parent_agent_id && (row.parent_offline_form_number || row.parent_employee_id || row.parent_name)) {
         const resolvedSeniorCode =
           row.parent_offline_form_number ||
           row.parent_employee_id ||
           "";
 
-        // Level-2 Sub-Agent: Reports to Parent Senior Agent
+        // Sub-Agent: Reports to Direct Senior Agent
         map.set(row.agent_id, {
           seniorCode: resolvedSeniorCode,
           seniorName: row.parent_name || "Senior Agent",
           seniorOfflineFormNumber: row.parent_offline_form_number || null,
-          level: "LEVEL_2",
+          level: calculatedDepth,
           parentAgentId: row.parent_agent_id,
           parentEmployeeId: row.parent_employee_id,
           parentOfflineFormNumber: row.parent_offline_form_number || null,
           parentName: row.parent_name,
-          canCreateSubAgent: false,
+          canCreateSubAgent: true,
         });
       } else {
-        // Level-1 Agent: Reports to ADMIN
+        // Root Agent: Reports to ADMIN
         map.set(row.agent_id, {
           seniorCode: "ADMIN",
           seniorName: row.creator_name || "Super Admin",
           seniorOfflineFormNumber: null,
-          level: "LEVEL_1",
+          level: 1,
           parentAgentId: null,
           parentEmployeeId: null,
           parentOfflineFormNumber: null,
           parentName: null,
-          canCreateSubAgent: row.can_create_sub_agent ?? true,
+          canCreateSubAgent: true,
         });
       }
     }
@@ -1035,7 +1049,7 @@ export function mapAgentRecord(record: Record<string, any>) {
     profile.parent_name ??
     null;
 
-  const level = record.level ?? profile.level ?? (parentAgentId ? "LEVEL_2" : "LEVEL_1");
+  const level = record.level !== undefined ? record.level : (profile.level !== undefined ? profile.level : (parentAgentId ? 2 : 1));
 
   const enrichedProfile = {
     ...profile,
