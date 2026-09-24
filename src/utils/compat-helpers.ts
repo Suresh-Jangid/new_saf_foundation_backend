@@ -531,6 +531,7 @@ export function mapMayraApplicationList(records: unknown) {
 /** Map Prisma insurance application rows to legacy field names expected by the admin UI. */
 export function mapInsuranceApplicationRecord(app: Record<string, any>) {
   const addedBy = app.addedBy || {};
+  const agentProfile = addedBy.agentProfile || {};
   const isActive = app.isActive === true || app.isActive === 1 || app.is_active === 1;
   const installments = Array.isArray(app.installments) ? app.installments : [];
   const firstInstallment = installments[0] || {};
@@ -543,6 +544,64 @@ export function mapInsuranceApplicationRecord(app: Record<string, any>) {
     app.nominee_photo ??
     app.nominee_photo_url ??
     "";
+
+  // Derive canonical Worker & Senior Codes / Names
+  const isAdmin = addedBy.role === "ADMIN" || app.addedByRole === "ADMIN";
+  const agentEmployeeId = agentProfile.employeeId || addedBy.employeeId || "";
+  const profileOffline = agentProfile.offlineFormNumber || agentProfile.offline_form_number || "";
+
+  // Worker code: sanitize so a UUID is NEVER used as code
+  let rawWorkerCode =
+    app.workerOfflineFormNumber ||
+    app.worker_offline_form_number ||
+    app.agentOfflineFormNumber ||
+    app.agent_offline_form_number ||
+    profileOffline ||
+    app.workerCode ||
+    app.worker_code ||
+    app.karyakartaCode ||
+    (isAdmin ? "ADMIN" : agentEmployeeId);
+
+  if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+    rawWorkerCode = isAdmin ? "ADMIN" : profileOffline || agentEmployeeId || "";
+  }
+  const workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const karyakartaCode = workerCode;
+  const workerOfflineFormNumber =
+    app.workerOfflineFormNumber ||
+    app.worker_offline_form_number ||
+    app.agentOfflineFormNumber ||
+    app.agent_offline_form_number ||
+    profileOffline ||
+    workerCode;
+
+  const workerName = app.workerName || app.karyakartaName || app.added_name || addedBy.name || (isAdmin ? "Super Admin" : "Super Admin");
+  const karyakartaName = workerName;
+  const workerMobile = app.workerMobile || app.added_mobile || addedBy.mobile || "";
+
+  // Senior code & name: sanitize so a UUID is NEVER used
+  let rawSeniorCode =
+    app.seniorOfflineFormNumber ||
+    app.senior_offline_form_number ||
+    app.seniorAgentOfflineFormNumber ||
+    app.senior_agent_offline_form_number ||
+    app.seniorCode ||
+    app.senior_code ||
+    app.uplineCode ||
+    app.upline_code;
+
+  if (!rawSeniorCode || isValidUuid(rawSeniorCode)) {
+    rawSeniorCode = "";
+  }
+  const seniorCode = rawSeniorCode || (isAdmin ? "ADMIN" : "ADMIN");
+  const seniorOfflineFormNumber =
+    app.seniorOfflineFormNumber ||
+    app.senior_offline_form_number ||
+    app.seniorAgentOfflineFormNumber ||
+    app.senior_agent_offline_form_number ||
+    (seniorCode !== "ADMIN" ? seniorCode : "");
+
+  const seniorName = app.seniorName || app.seniorWorker || (isAdmin ? (addedBy.name || "Super Admin") : "Super Admin");
 
   return {
     ...app,
@@ -586,10 +645,34 @@ export function mapInsuranceApplicationRecord(app: Record<string, any>) {
     age: app.age ?? calculateAgeFromDateOfBirth(app.dateOfBirth ?? app.date_of_birth),
     is_active: isActive ? 1 : 0,
     isActive,
-    added_name: app.added_name ?? addedBy.name ?? "",
-    added_mobile: app.added_mobile ?? addedBy.mobile ?? "",
-    workerName: app.workerName ?? addedBy.name ?? "",
-    workerMobile: app.workerMobile ?? addedBy.mobile ?? "",
+    added_name: workerName,
+    added_mobile: workerMobile,
+    workerName,
+    karyakartaName,
+    workerMobile,
+    workerCode,
+    worker_code: workerCode,
+    karyakartaCode,
+    agentCode: workerCode,
+    agent_code: workerCode,
+    workerOfflineFormNumber,
+    worker_offline_form_number: workerOfflineFormNumber,
+    agentOfflineFormNumber: workerOfflineFormNumber,
+    agent_offline_form_number: workerOfflineFormNumber,
+    seniorCode,
+    senior_code: seniorCode,
+    uplineCode: seniorCode,
+    upline_code: seniorCode,
+    seniorOfflineFormNumber,
+    senior_offline_form_number: seniorOfflineFormNumber,
+    seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+    senior_agent_offline_form_number: seniorOfflineFormNumber,
+    seniorName,
+    senior_name: seniorName,
+    seniorWorker: seniorName,
+    senior_worker: seniorName,
+    parentAgentId: app.parentAgentId ?? app.parent_agent_id ?? null,
+    parent_agent_id: app.parentAgentId ?? app.parent_agent_id ?? null,
     addedby_id: app.addedById ?? app.addedby_id ?? addedBy.id,
     addedById: app.addedById ?? app.addedby_id ?? addedBy.id,
     payment_amount: firstInstallment.amount ?? app.payment_amount ?? app.paymentAmount,

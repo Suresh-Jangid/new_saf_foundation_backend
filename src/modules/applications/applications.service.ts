@@ -1202,10 +1202,27 @@ export class ApplicationsService {
     const limit = f.limit;
     const includeOptions = {
       addedBy: {
-        select: { id: true, name: true, mobile: true },
+        select: {
+          id: true,
+          name: true,
+          mobile: true,
+          role: true,
+          agentProfile: {
+            select: {
+              id: true,
+              employeeId: true,
+              offlineFormNumber: true,
+              workArea: true,
+              designation: true,
+            },
+          },
+        },
       },
       surakshaBima: true,
     };
+
+    let records: any[];
+    let totalCount: number | undefined;
 
     if (f.sortBy === "lastAdded") {
       // See paginateByFormNumberSeq in list-filters.ts / the matching fix in
@@ -1214,38 +1231,80 @@ export class ApplicationsService {
         where: whereClause,
         select: { id: true, formNumber: true, offlineFormNumber: true, createdAt: true },
       });
-      const { data: records, total } = await paginateByFormNumberSeq(candidates, page, limit, (ids) =>
+      const paginated = await paginateByFormNumberSeq(candidates, page, limit, (ids) =>
         prisma.insuranceApplication.findMany({ where: { id: { in: ids } }, include: includeOptions })
       );
+      records = paginated.data;
+      totalCount = paginated.total;
+    } else {
+      const queryOptions: any = {
+        where: whereClause,
+        include: includeOptions,
+        orderBy: buildOrderBy(f.sortBy, "srNo"),
+      };
 
       if (page !== undefined && limit !== undefined) {
-        return { data: records, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+        queryOptions.skip = (page - 1) * limit;
+        queryOptions.take = limit;
       }
-      return records;
+
+      records = await prisma.insuranceApplication.findMany(queryOptions);
+
+      if (page !== undefined && limit !== undefined) {
+        totalCount = await prisma.insuranceApplication.count({ where: whereClause });
+      }
     }
 
-    const queryOptions: any = {
-      where: whereClause,
-      include: includeOptions,
-      orderBy: buildOrderBy(f.sortBy, "srNo"),
-    };
+    // Batch resolve senior hierarchy for all applications to eliminate N+1 queries
+    const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
+    for (const r of records as any[]) {
+      const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
+      const isAdmin = r.addedBy?.role === "ADMIN";
+      const agentEmployeeId = r.addedBy?.agentProfile?.employeeId || "";
+      const workerOfflineFormNumber = r.addedBy?.agentProfile?.offlineFormNumber || "";
 
-    if (page !== undefined && limit !== undefined) {
-      queryOptions.skip = (page - 1) * limit;
-      queryOptions.take = limit;
+      let rawWorkerCode = r.workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      r.workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      r.workerName = r.workerName || r.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      r.workerMobile = r.workerMobile || r.addedBy?.mobile || "";
+      r.workerOfflineFormNumber = workerOfflineFormNumber || "";
+      r.agentOfflineFormNumber = workerOfflineFormNumber || "";
+
+      if (hierarchy) {
+        r.seniorCode = hierarchy.seniorCode;
+        r.seniorName = hierarchy.seniorName;
+        r.seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        r.seniorAgentOfflineFormNumber = r.seniorOfflineFormNumber;
+        r.parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        r.seniorCode = "ADMIN";
+        r.seniorName = r.addedBy?.name || "Super Admin";
+        r.seniorOfflineFormNumber = "";
+        r.seniorAgentOfflineFormNumber = "";
+        r.parentAgentId = null;
+      } else {
+        r.seniorCode = "ADMIN";
+        r.seniorName = "Super Admin";
+        r.seniorOfflineFormNumber = "";
+        r.seniorAgentOfflineFormNumber = "";
+        r.parentAgentId = null;
+      }
+      r.uplineCode = r.seniorCode;
+      r.seniorWorker = r.seniorName;
     }
 
-    const records = await prisma.insuranceApplication.findMany(queryOptions);
-
-    if (page !== undefined && limit !== undefined) {
-      const total = await prisma.insuranceApplication.count({ where: whereClause });
+    if (page !== undefined && limit !== undefined && totalCount !== undefined) {
       return {
         data: records,
         meta: {
-          total,
+          total: totalCount,
           page,
           limit,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.ceil(totalCount / limit),
         },
       };
     }
@@ -1261,7 +1320,21 @@ export class ApplicationsService {
       where: { id, deletedAt: null },
       include: {
         addedBy: {
-          select: { id: true, name: true, mobile: true },
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            role: true,
+            agentProfile: {
+              select: {
+                id: true,
+                employeeId: true,
+                offlineFormNumber: true,
+                workArea: true,
+                designation: true,
+              },
+            },
+          },
         },
         installments: {
           orderBy: { date: "asc" },
@@ -1272,6 +1345,46 @@ export class ApplicationsService {
 
     if (!app) {
       throw new NotFoundError("Insurance Application not found");
+    }
+
+    if (app.addedById) {
+      const hierarchyMap = await resolveAgentSeniorHierarchyBatch([app.addedById]);
+      const hierarchy = hierarchyMap.get(app.addedById);
+      const isAdmin = app.addedBy?.role === "ADMIN";
+      const agentEmployeeId = app.addedBy?.agentProfile?.employeeId || "";
+      const workerOfflineFormNumber = app.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = (app as any).workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      (app as any).workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      (app as any).workerName = (app as any).workerName || app.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      (app as any).workerMobile = (app as any).workerMobile || app.addedBy?.mobile || "";
+      (app as any).workerOfflineFormNumber = workerOfflineFormNumber || "";
+      (app as any).agentOfflineFormNumber = workerOfflineFormNumber || "";
+
+      if (hierarchy) {
+        (app as any).seniorCode = hierarchy.seniorCode;
+        (app as any).seniorName = hierarchy.seniorName;
+        (app as any).seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        (app as any).seniorAgentOfflineFormNumber = (app as any).seniorOfflineFormNumber;
+        (app as any).parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        (app as any).seniorCode = "ADMIN";
+        (app as any).seniorName = app.addedBy?.name || "Super Admin";
+        (app as any).seniorOfflineFormNumber = "";
+        (app as any).seniorAgentOfflineFormNumber = "";
+        (app as any).parentAgentId = null;
+      } else {
+        (app as any).seniorCode = "ADMIN";
+        (app as any).seniorName = "Super Admin";
+        (app as any).seniorOfflineFormNumber = "";
+        (app as any).seniorAgentOfflineFormNumber = "";
+        (app as any).parentAgentId = null;
+      }
+      (app as any).uplineCode = (app as any).seniorCode;
+      (app as any).seniorWorker = (app as any).seniorName;
     }
 
     return app;
