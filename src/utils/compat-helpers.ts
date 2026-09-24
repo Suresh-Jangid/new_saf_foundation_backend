@@ -383,6 +383,103 @@ export function mapMayraApplicationRecord(reg: Record<string, any>) {
     nomineeFathername: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
     nominee_father_name: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
     nominee_relation: reg.nomineeRelation ?? reg.nominee_relation,
+    nomineeRelation: reg.nomineeRelation ?? reg.nominee_relation,
+    nomineeAadhar:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nominee_aadhar:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nomineeAadhaar:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nominee_aadhaar:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nomineeAadharNumber:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nominee_aadhar_number:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nomineeAadhaarNumber:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
+    nominee_aadhaar_number:
+      reg.nomineeAadhar ??
+      reg.nominee_aadhar ??
+      reg.nomineeAadhaar ??
+      reg.nominee_aadhaar ??
+      reg.nomineeAadharNumber ??
+      reg.nominee_aadhar_number ??
+      reg.nomineeAadhaarNumber ??
+      reg.nominee_aadhaar_number ??
+      reg.nomineeAadharNo ??
+      reg.nomineeAadhaarNo ??
+      "",
     passport_photo: passportPhoto,
     passportPhoto,
     passportPhotoUrl: reg.passportPhotoUrl ?? passportPhoto,

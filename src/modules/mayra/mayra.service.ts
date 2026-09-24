@@ -163,6 +163,14 @@ export class MayraService {
             data.nomineeHusbandName || data.nomineeHusbandname || null,
           nomineeGotra: data.nomineeGotra || null,
           nomineeAddress: data.nomineeAddress || null,
+          nomineeAadhar:
+            data.nomineeAadhar ||
+            data.nominee_aadhar ||
+            data.nomineeAadhaar ||
+            data.nominee_aadhaar ||
+            data.nomineeAadharNumber ||
+            data.nomineeAadhaarNumber ||
+            null,
           // These columns are NOT NULL in the DB but are optional / conditionally
           // sent by the form (e.g. workerName is only sent when an agent is picked).
           // Default them to "" so a submit without them still succeeds instead of
@@ -505,6 +513,25 @@ export class MayraService {
         ? data.nomineeHusbandname
         : reg.nomineeHusbandName;
 
+    const nomineeAadharRaw =
+      data.nomineeAadhar !== undefined
+        ? data.nomineeAadhar
+        : data.nominee_aadhar !== undefined
+        ? data.nominee_aadhar
+        : data.nomineeAadhaar !== undefined
+        ? data.nomineeAadhaar
+        : data.nominee_aadhaar !== undefined
+        ? data.nominee_aadhaar
+        : data.nomineeAadharNumber !== undefined
+        ? data.nomineeAadharNumber
+        : data.nomineeAadhaarNumber !== undefined
+        ? data.nomineeAadhaarNumber
+        : undefined;
+    const nomineeAadhar =
+      nomineeAadharRaw !== undefined
+        ? (nomineeAadharRaw ? String(nomineeAadharRaw).replace(/\D/g, "") : null)
+        : reg.nomineeAadhar;
+
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
@@ -549,6 +576,7 @@ export class MayraService {
         nomineeHusbandName,
         nomineeGotra: data.nomineeGotra !== undefined ? data.nomineeGotra : reg.nomineeGotra,
         nomineeAddress: data.nomineeAddress !== undefined ? data.nomineeAddress : reg.nomineeAddress,
+        nomineeAadhar,
         nomineeRelation: data.nomineeRelation !== undefined ? data.nomineeRelation : reg.nomineeRelation,
         workerName: data.workerName !== undefined ? data.workerName : reg.workerName,
         workerMobile: data.workerMobile !== undefined ? data.workerMobile : reg.workerMobile,
