@@ -6,6 +6,7 @@ import { parseDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
 import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
+import { isValidUuid, resolveAgentSeniorHierarchyBatch } from "../../utils/compat-helpers";
 import {
   CreateJanniDeliveryInput,
   UpdateJanniDeliveryInput,
@@ -348,6 +349,16 @@ export class JanniDeliveryService {
               id: true,
               name: true,
               mobile: true,
+              role: true,
+              agentProfile: {
+                select: {
+                  id: true,
+                  employeeId: true,
+                  offlineFormNumber: true,
+                  workArea: true,
+                  designation: true,
+                },
+              },
             },
           },
           installments: {
@@ -359,18 +370,81 @@ export class JanniDeliveryService {
       }),
     ]);
 
-    const formattedRecords = records.map((r) => ({
-      ...r,
-      offlineFormNumber: r.offlineFormNumber ?? null,
-      offline_form_number: r.offlineFormNumber ?? null,
-      offlineFormNo: r.offlineFormNumber ?? null,
-      nomineeAadhar: r.nomineeAadhar ?? null,
-      nominee_aadhar: r.nomineeAadhar ?? null,
-      nomineeAadhaar: r.nomineeAadhar ?? null,
-      nomineePhotoUrl: r.nomineePhotoUrl ?? null,
-      nominee_photo_url: r.nomineePhotoUrl ?? null,
-      nomineePhoto: r.nomineePhotoUrl ?? null,
-    }));
+    const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
+
+    const formattedRecords = records.map((r: any) => {
+      const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
+      const isAdmin = r.addedBy?.role === "ADMIN";
+      const agentEmployeeId = r.addedBy?.agentProfile?.employeeId || "";
+      const workerOfflineFormNumber = r.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = r.workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      const workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      const workerName = r.workerName || r.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      const workerMobile = r.workerMobile || r.addedBy?.mobile || "";
+
+      let seniorCode = "ADMIN";
+      let seniorName = "Super Admin";
+      let seniorOfflineFormNumber = "";
+      let parentAgentId = null;
+
+      if (hierarchy) {
+        seniorCode = hierarchy.seniorCode;
+        seniorName = hierarchy.seniorName;
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        seniorCode = "ADMIN";
+        seniorName = r.addedBy?.name || "Super Admin";
+        seniorOfflineFormNumber = "";
+        parentAgentId = null;
+      }
+
+      return {
+        ...r,
+        offlineFormNumber: r.offlineFormNumber ?? null,
+        offline_form_number: r.offlineFormNumber ?? null,
+        offlineFormNo: r.offlineFormNumber ?? null,
+        nomineeAadhar: r.nomineeAadhar ?? null,
+        nominee_aadhar: r.nomineeAadhar ?? null,
+        nomineeAadhaar: r.nomineeAadhar ?? null,
+        nomineePhotoUrl: r.nomineePhotoUrl ?? null,
+        nominee_photo_url: r.nomineePhotoUrl ?? null,
+        nomineePhoto: r.nomineePhotoUrl ?? null,
+        added_name: workerName,
+        added_mobile: workerMobile,
+        workerName,
+        karyakartaName: workerName,
+        workerMobile,
+        workerCode,
+        worker_code: workerCode,
+        karyakartaCode: workerCode,
+        agentCode: workerCode,
+        agent_code: workerCode,
+        workerOfflineFormNumber: workerOfflineFormNumber || "",
+        worker_offline_form_number: workerOfflineFormNumber || "",
+        agentOfflineFormNumber: workerOfflineFormNumber || "",
+        agent_offline_form_number: workerOfflineFormNumber || "",
+        seniorCode,
+        senior_code: seniorCode,
+        uplineCode: seniorCode,
+        upline_code: seniorCode,
+        seniorOfflineFormNumber,
+        senior_offline_form_number: seniorOfflineFormNumber,
+        seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+        senior_agent_offline_form_number: seniorOfflineFormNumber,
+        seniorName,
+        senior_name: seniorName,
+        seniorWorker: seniorName,
+        senior_worker: seniorName,
+        parentAgentId,
+        parent_agent_id: parentAgentId,
+      };
+    });
 
     return {
       success: true,
@@ -403,6 +477,15 @@ export class JanniDeliveryService {
             name: true,
             mobile: true,
             role: true,
+            agentProfile: {
+              select: {
+                id: true,
+                employeeId: true,
+                offlineFormNumber: true,
+                workArea: true,
+                designation: true,
+              },
+            },
           },
         },
         installments: {
@@ -423,6 +506,48 @@ export class JanniDeliveryService {
       );
     }
 
+    let workerCode = "ADMIN";
+    let workerName = record.addedBy?.name || "Super Admin";
+    let workerMobile = record.addedBy?.mobile || "";
+    let workerOfflineFormNumber = "";
+    let seniorCode = "ADMIN";
+    let seniorName = "Super Admin";
+    let seniorOfflineFormNumber = "";
+    let parentAgentId = null;
+
+    if (record.addedById) {
+      const hierarchyMap = await resolveAgentSeniorHierarchyBatch([record.addedById]);
+      const hierarchy = hierarchyMap.get(record.addedById);
+      const isAdmin = record.addedBy?.role === "ADMIN";
+      const agentEmployeeId = record.addedBy?.agentProfile?.employeeId || "";
+      workerOfflineFormNumber = record.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = (record as any).workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      }
+      workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      workerName = (record as any).workerName || record.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      workerMobile = (record as any).workerMobile || record.addedBy?.mobile || "";
+
+      if (hierarchy) {
+        seniorCode = hierarchy.seniorCode;
+        seniorName = hierarchy.seniorName;
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        parentAgentId = hierarchy.parentAgentId;
+      } else if (isAdmin) {
+        seniorCode = "ADMIN";
+        seniorName = record.addedBy?.name || "Super Admin";
+        seniorOfflineFormNumber = "";
+        parentAgentId = null;
+      } else {
+        seniorCode = "ADMIN";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "";
+        parentAgentId = null;
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -436,6 +561,34 @@ export class JanniDeliveryService {
         nomineePhotoUrl: record.nomineePhotoUrl ?? null,
         nominee_photo_url: record.nomineePhotoUrl ?? null,
         nomineePhoto: record.nomineePhotoUrl ?? null,
+        added_name: workerName,
+        added_mobile: workerMobile,
+        workerName,
+        karyakartaName: workerName,
+        workerMobile,
+        workerCode,
+        worker_code: workerCode,
+        karyakartaCode: workerCode,
+        agentCode: workerCode,
+        agent_code: workerCode,
+        workerOfflineFormNumber: workerOfflineFormNumber || "",
+        worker_offline_form_number: workerOfflineFormNumber || "",
+        agentOfflineFormNumber: workerOfflineFormNumber || "",
+        agent_offline_form_number: workerOfflineFormNumber || "",
+        seniorCode,
+        senior_code: seniorCode,
+        uplineCode: seniorCode,
+        upline_code: seniorCode,
+        seniorOfflineFormNumber,
+        senior_offline_form_number: seniorOfflineFormNumber,
+        seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+        senior_agent_offline_form_number: seniorOfflineFormNumber,
+        seniorName,
+        senior_name: seniorName,
+        seniorWorker: seniorName,
+        senior_worker: seniorName,
+        parentAgentId,
+        parent_agent_id: parentAgentId,
       },
     };
   }
