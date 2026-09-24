@@ -82,6 +82,10 @@ export interface UpdateJanniDeliveryInput {
   category?: ApplicationCategory;
   totalAmount?: number;
   pendingAmount?: number;
+  selectedAgentId?: string | null;
+  addedById?: string | null;
+  agentId?: string | null;
+  addedby_id?: string | null;
 }
 
 export interface JanniDeliveryFilter {

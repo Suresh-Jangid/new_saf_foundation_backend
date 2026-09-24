@@ -747,6 +747,11 @@ export class JanniDeliveryService {
         ...(data.category ? { category: normalizeCategory(data.category) } : {}),
         ...(data.totalAmount !== undefined ? { totalAmount: Number(data.totalAmount) } : {}),
         ...(data.pendingAmount !== undefined ? { pendingAmount: Number(data.pendingAmount) } : {}),
+        ...(actor.role === "ADMIN" &&
+        (data.selectedAgentId || data.addedById || data.agentId) &&
+        isValidUuid(String(data.selectedAgentId || data.addedById || data.agentId))
+          ? { addedById: String(data.selectedAgentId || data.addedById || data.agentId) }
+          : {}),
       },
     });
 
