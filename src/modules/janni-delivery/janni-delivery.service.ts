@@ -375,32 +375,50 @@ export class JanniDeliveryService {
 
     const formattedRecords = records.map((r: any) => {
       const hierarchy = r.addedById ? hierarchyMap.get(r.addedById) : null;
-      const isAdmin = r.addedBy?.role === "ADMIN";
+      const isAdmin =
+        r.addedBy?.role === "ADMIN" ||
+        r.addedBy?.name === "Default Agent" ||
+        r.addedBy?.name === "Super Admin";
       const agentEmployeeId = r.addedBy?.agentProfile?.employeeId || "";
       const workerOfflineFormNumber = r.addedBy?.agentProfile?.offlineFormNumber || "";
 
-      let rawWorkerCode = r.workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      let rawWorkerCode = r.workerCode;
       if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
-        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+        if (isAdmin || !workerOfflineFormNumber) {
+          rawWorkerCode = "ADMIN";
+        } else {
+          rawWorkerCode = workerOfflineFormNumber || agentEmployeeId || "ADMIN";
+        }
       }
       const workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
-      const workerName = r.workerName || r.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      const resolvedWorkerOfflineForm = workerOfflineFormNumber || (isAdmin || !workerOfflineFormNumber ? "ADMIN" : "");
+      const workerName = r.workerName || r.addedBy?.name || (isAdmin ? (r.addedBy?.name || "Super Admin") : "Super Admin");
       const workerMobile = r.workerMobile || r.addedBy?.mobile || "";
 
       let seniorCode = "ADMIN";
       let seniorName = "Super Admin";
-      let seniorOfflineFormNumber = "";
+      let seniorOfflineFormNumber = "ADMIN";
       let parentAgentId = null;
 
-      if (hierarchy) {
+      if (hierarchy && hierarchy.seniorCode && hierarchy.seniorCode !== "ADMIN") {
         seniorCode = hierarchy.seniorCode;
         seniorName = hierarchy.seniorName;
         seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
         parentAgentId = hierarchy.parentAgentId;
+      } else if (hierarchy) {
+        seniorCode = hierarchy.seniorCode || "ADMIN";
+        seniorName = hierarchy.seniorName || "Super Admin";
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || seniorCode || "ADMIN";
+        parentAgentId = hierarchy.parentAgentId || null;
       } else if (isAdmin) {
         seniorCode = "ADMIN";
-        seniorName = r.addedBy?.name || "Super Admin";
-        seniorOfflineFormNumber = "";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "ADMIN";
+        parentAgentId = null;
+      } else {
+        seniorCode = "ADMIN";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "ADMIN";
         parentAgentId = null;
       }
 
@@ -425,10 +443,10 @@ export class JanniDeliveryService {
         karyakartaCode: workerCode,
         agentCode: workerCode,
         agent_code: workerCode,
-        workerOfflineFormNumber: workerOfflineFormNumber || "",
-        worker_offline_form_number: workerOfflineFormNumber || "",
-        agentOfflineFormNumber: workerOfflineFormNumber || "",
-        agent_offline_form_number: workerOfflineFormNumber || "",
+        workerOfflineFormNumber: resolvedWorkerOfflineForm,
+        worker_offline_form_number: resolvedWorkerOfflineForm,
+        agentOfflineFormNumber: resolvedWorkerOfflineForm,
+        agent_offline_form_number: resolvedWorkerOfflineForm,
         seniorCode,
         senior_code: seniorCode,
         uplineCode: seniorCode,
@@ -512,41 +530,55 @@ export class JanniDeliveryService {
     let workerOfflineFormNumber = "";
     let seniorCode = "ADMIN";
     let seniorName = "Super Admin";
-    let seniorOfflineFormNumber = "";
+    let seniorOfflineFormNumber = "ADMIN";
     let parentAgentId = null;
 
     if (record.addedById) {
       const hierarchyMap = await resolveAgentSeniorHierarchyBatch([record.addedById]);
       const hierarchy = hierarchyMap.get(record.addedById);
-      const isAdmin = record.addedBy?.role === "ADMIN";
+      const isAdmin =
+        record.addedBy?.role === "ADMIN" ||
+        record.addedBy?.name === "Default Agent" ||
+        record.addedBy?.name === "Super Admin";
       const agentEmployeeId = record.addedBy?.agentProfile?.employeeId || "";
       workerOfflineFormNumber = record.addedBy?.agentProfile?.offlineFormNumber || "";
 
-      let rawWorkerCode = (record as any).workerCode || (isAdmin ? "ADMIN" : workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+      let rawWorkerCode = (record as any).workerCode;
       if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
-        rawWorkerCode = isAdmin ? "ADMIN" : (workerOfflineFormNumber || agentEmployeeId || "ADMIN");
+        if (isAdmin || !workerOfflineFormNumber) {
+          rawWorkerCode = "ADMIN";
+        } else {
+          rawWorkerCode = workerOfflineFormNumber || agentEmployeeId || "ADMIN";
+        }
       }
       workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
-      workerName = (record as any).workerName || record.addedBy?.name || (isAdmin ? "Super Admin" : "Super Admin");
+      workerName = (record as any).workerName || record.addedBy?.name || (isAdmin ? (record.addedBy?.name || "Super Admin") : "Super Admin");
       workerMobile = (record as any).workerMobile || record.addedBy?.mobile || "";
 
-      if (hierarchy) {
+      if (hierarchy && hierarchy.seniorCode && hierarchy.seniorCode !== "ADMIN") {
         seniorCode = hierarchy.seniorCode;
         seniorName = hierarchy.seniorName;
         seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
         parentAgentId = hierarchy.parentAgentId;
+      } else if (hierarchy) {
+        seniorCode = hierarchy.seniorCode || "ADMIN";
+        seniorName = hierarchy.seniorName || "Super Admin";
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || seniorCode || "ADMIN";
+        parentAgentId = hierarchy.parentAgentId || null;
       } else if (isAdmin) {
         seniorCode = "ADMIN";
-        seniorName = record.addedBy?.name || "Super Admin";
-        seniorOfflineFormNumber = "";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "ADMIN";
         parentAgentId = null;
       } else {
         seniorCode = "ADMIN";
         seniorName = "Super Admin";
-        seniorOfflineFormNumber = "";
+        seniorOfflineFormNumber = "ADMIN";
         parentAgentId = null;
       }
     }
+
+    const resolvedWorkerOfflineForm = workerOfflineFormNumber || (workerCode === "ADMIN" ? "ADMIN" : "");
 
     return {
       success: true,
@@ -571,10 +603,10 @@ export class JanniDeliveryService {
         karyakartaCode: workerCode,
         agentCode: workerCode,
         agent_code: workerCode,
-        workerOfflineFormNumber: workerOfflineFormNumber || "",
-        worker_offline_form_number: workerOfflineFormNumber || "",
-        agentOfflineFormNumber: workerOfflineFormNumber || "",
-        agent_offline_form_number: workerOfflineFormNumber || "",
+        workerOfflineFormNumber: resolvedWorkerOfflineForm,
+        worker_offline_form_number: resolvedWorkerOfflineForm,
+        agentOfflineFormNumber: resolvedWorkerOfflineForm,
+        agent_offline_form_number: resolvedWorkerOfflineForm,
         seniorCode,
         senior_code: seniorCode,
         uplineCode: seniorCode,
