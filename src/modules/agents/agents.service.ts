@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma, PRISMA_TX_OPTIONS } from "../../config/db";
-import { BadRequestError, NotFoundError } from "../../utils/errors";
+import { BadRequestError, NotFoundError, ForbiddenError } from "../../utils/errors";
 import { Role, Gender } from "@prisma/client";
 import { parseOptionalDateInput } from "../../utils/parse-date";
 import { lockFormNumberSequence } from "../../utils/sequence-lock";
@@ -130,9 +130,29 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
       }
     : agent.agentProfile;
 
-  return {
-    ...agent,
-    agentProfile,
+  // Strip sensitive credential fields before returning
+  const {
+    passwordHash: _passwordHash,
+    password_hash: _password_hash,
+    password: _password,
+    ...safeAgent
+  } = (agent || {}) as any;
+
+  const safeAgentProfile = agentProfile
+    ? (() => {
+        const {
+          passwordHash: _p1,
+          password_hash: _p2,
+          password: _p3,
+          ...cleanProfile
+        } = agentProfile as any;
+        return cleanProfile;
+      })()
+    : agentProfile;
+
+  const result = {
+    ...safeAgent,
+    agentProfile: safeAgentProfile,
     offlineFormNumber,
     offline_form_number: offlineFormNumber,
     level,
@@ -151,6 +171,12 @@ function enrichAgentWithHierarchy(agent: any, h: any) {
     parentName,
     hierarchy,
   };
+
+  delete (result as any).passwordHash;
+  delete (result as any).password_hash;
+  delete (result as any).password;
+
+  return result;
 }
 
 export class AgentsService {
@@ -616,7 +642,11 @@ export class AgentsService {
   /**
    * Update Agent Profile details and Hierarchy
    */
-  public async updateAgent(id: string, data: any, modifierId?: string) {
+  public async updateAgent(id: string, data: any, modifierId?: string, modifierRole?: string) {
+    if (modifierRole && modifierRole !== Role.ADMIN) {
+      throw new ForbiddenError("Forbidden: Only administrators can update agent profiles");
+    }
+
     const user = await prisma.user.findFirst({
       where: { id, role: Role.AGENT, deletedAt: null },
       include: { agentProfile: true },
@@ -627,9 +657,9 @@ export class AgentsService {
     }
 
     let passwordHash = user.passwordHash;
-    if (data.password) {
+    if (data.password && typeof data.password === "string" && data.password.trim() !== "") {
       const salt = await bcrypt.genSalt(10);
-      passwordHash = await bcrypt.hash(data.password, salt);
+      passwordHash = await bcrypt.hash(data.password.trim(), salt);
     }
 
     const profileUpdates: Record<string, any> = {

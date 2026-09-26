@@ -29,9 +29,10 @@ router.post(
   controller.createAgent.bind(controller)
 );
 
-// Update agent profile (Admin or Agent)
+// Update agent profile (Admin Only)
 router.put(
   "/:id",
+  authorizeRoles("ADMIN") as any,
   validateRequest(updateAgentSchema),
   controller.updateAgent.bind(controller)
 );

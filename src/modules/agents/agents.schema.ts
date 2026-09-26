@@ -102,7 +102,7 @@ export const updateAgentSchema = z.object({
     name: z.string().trim().min(2).optional(),
     mobile: mobilePhoneSchema.optional(),
     email: z.preprocess((val) => (val === "" ? undefined : val), z.string().trim().email("Invalid email format").optional().nullable()),
-    password: z.string().min(6).optional(),
+    password: z.preprocess((val) => (val === "" ? undefined : val), z.string().min(6, "Password must be at least 6 characters").optional()),
 
     // Hierarchy updates
     seniorEmployeeId: z.string().trim().optional().nullable(),

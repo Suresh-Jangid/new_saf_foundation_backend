@@ -81,7 +81,8 @@ export class AgentsController {
     try {
       const { id } = req.params;
       const modifierId = (req as any).user?.id || (req as any).user?.userId;
-      const result = await agentsService.updateAgent(id, req.body, modifierId);
+      const modifierRole = (req as any).user?.role;
+      const result = await agentsService.updateAgent(id, req.body, modifierId, modifierRole);
       res.status(200).json({
         success: true,
         message: "Agent profile updated successfully",
