@@ -68,7 +68,7 @@ router.delete(
 // Record general installment payment
 router.post(
   "/general/:id/installments",
-  checkPermission("applicant_registration", "create") as any,
+  checkPermission("general_application_payment", "create") as any,
   validateRequest(createInstallmentSchema),
   controller.addGeneralInstallment.bind(controller)
 );
@@ -78,21 +78,21 @@ router.post(
 // List Insurance Applications
 router.get(
   "/insurance",
-  checkPermission("suraksha_bima_yojana_payment", "view") as any,
+  checkPermission("security_application", "view") as any,
   controller.getAllInsuranceApplications.bind(controller)
 );
 
 // Get Insurance Application details
 router.get(
   "/insurance/:id",
-  checkPermission("suraksha_bima_yojana_payment", "view") as any,
+  checkPermission("security_application", "view") as any,
   controller.getInsuranceApplicationById.bind(controller)
 );
 
 // Create Insurance Application
 router.post(
   "/insurance",
-  checkPermission("suraksha_bima_yojana_payment", "create") as any,
+  checkPermission("security_application", "create") as any,
   validateRequest(createInsuranceApplicationSchema),
   controller.createInsuranceApplication.bind(controller)
 );
@@ -100,7 +100,7 @@ router.post(
 // Update Insurance Application details
 router.put(
   "/insurance/:id",
-  checkPermission("suraksha_bima_yojana_payment", "update") as any,
+  checkPermission("security_application", "update") as any,
   validateRequest(updateInsuranceApplicationSchema),
   controller.updateInsuranceApplication.bind(controller)
 );
@@ -108,14 +108,14 @@ router.put(
 // Delete Insurance Application
 router.delete(
   "/insurance/:id",
-  checkPermission("suraksha_bima_yojana_payment", "delete") as any,
+  checkPermission("security_application", "delete") as any,
   controller.softDeleteInsuranceApplication.bind(controller)
 );
 
 // Record insurance installment payment
 router.post(
   "/insurance/:id/installments",
-  checkPermission("suraksha_bima_yojana_payment", "create") as any,
+  checkPermission("insurance_application_payment", "create") as any,
   validateRequest(createInstallmentSchema),
   controller.addInsuranceInstallment.bind(controller)
 );
@@ -123,7 +123,7 @@ router.post(
 // Bind Suraksha Bima Yojana details to Insurance Application
 router.post(
   "/insurance/:id/suraksha-bima",
-  checkPermission("suraksha_bima_yojana_payment", "create") as any,
+  checkPermission("suraksha_bima_yojana", "create") as any,
   validateRequest(createSurakshaBimaSchema),
   controller.createSurakshaBima.bind(controller)
 );
@@ -131,19 +131,19 @@ router.post(
 // ── BULK SURAKSHA BIMA YOJANA ENDPOINTS ──────────────
 router.get(
   "/insurance/bulk/data",
-  checkPermission("suraksha_bima_yojana_payment", "view") as any,
+  checkPermission("bulk_suraksha_bima_emi", "view") as any,
   controller.getInsuranceBulkData.bind(controller)
 );
 
 router.post(
   "/insurance/bulk/payments",
-  checkPermission("suraksha_bima_yojana_payment", "create") as any,
+  checkPermission("bulk_suraksha_bima_emi", "update") as any,
   controller.updateBimaPaymentStatus.bind(controller)
 );
 
 router.post(
   "/insurance/bulk/pdf-status",
-  checkPermission("suraksha_bima_yojana_payment", "create") as any,
+  checkPermission("bulk_suraksha_bima_emi", "update") as any,
   controller.updateInsurancePdfStatus.bind(controller)
 );
 

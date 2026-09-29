@@ -1,3 +1,4 @@
+import { getModuleWithAliases, isValidModule, isAgentManageableModule, isValidAction } from '../../config/permissions';
 import "regenerator-runtime/runtime";
 import { Router, Request, Response } from "express";
 import multer from "multer";
@@ -15,7 +16,7 @@ import { verifyAccessToken } from "../../utils/jwt";
 import { prisma } from "../../config/db";
 import { saveImagePayload } from "../../utils/file-upload";
 // drawDevanagariText imported via dynamic require where needed
-import { NotFoundError, BadRequestError, ConflictError } from "../../utils/errors";
+import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from "../../utils/errors";
 import { findAadharOwner, AadharSourceModel } from "../../utils/aadhar-uniqueness";
 import {
   applyPartialUpdate,
@@ -117,21 +118,671 @@ const dashboardService = new DashboardService();
 // file's single apicall switch (which isn't per-route Express middleware).
 // Admins always pass; agents must have the matching AgentPermission row.
 async function hasAgentPermission(
-  user: { userId?: string; role?: string } | null,
+  user: { userId?: string; id?: string; role?: string } | null,
   moduleName: string,
   action: "view" | "create" | "update" | "delete"
 ): Promise<boolean> {
   if (!user) return false;
   if (user.role === "ADMIN") return true;
-  const permission = await prisma.agentPermission.findUnique({
-    where: { userId_module: { userId: user.userId as string, module: moduleName } },
+  const uid = user.userId || user.id;
+  if (!uid) return false;
+  const allModuleKeys = getModuleWithAliases(moduleName);
+  const permission = await prisma.agentPermission.findFirst({
+    where: {
+      userId: uid,
+      module: { in: allModuleKeys },
+      OR: [
+        { canView: true },
+        { canCreate: true },
+        { canUpdate: true },
+        { canDelete: true },
+      ],
+    },
   });
   if (!permission) return false;
-  if (action === "view") return permission.canView;
-  if (action === "create") return permission.canCreate;
-  if (action === "update") return permission.canUpdate;
-  return permission.canDelete;
+  if (action === "view") return Boolean(permission.canView);
+  if (action === "create") return Boolean(permission.canCreate);
+  if (action === "update") return Boolean(permission.canUpdate);
+  return Boolean(permission.canDelete);
 }
+
+
+// ── CANONICAL RBAC ENFORCEMENT MAP FOR LEGACY COMPATIBILITY ENDPOINTS ──
+const APICALL_RBAC_MAP: Record<string, { type?: "PUBLIC" | "ADMIN_ONLY" | "AUTH_ONLY"; module?: string; action?: "view" | "create" | "update" | "delete"; desc: string }> = {
+  "login": {
+    "type": "PUBLIC",
+    "desc": "User/Admin login authentication"
+  },
+  "agentLogin": {
+    "type": "PUBLIC",
+    "desc": "Agent mobile/password login"
+  },
+  "register": {
+    "type": "PUBLIC",
+    "desc": "Public user self-registration"
+  },
+  "logout": {
+    "type": "AUTH_ONLY",
+    "desc": "Session termination / logout"
+  },
+  "calculateMayraFees": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Lookup age-slab fee for Mayra registration"
+  },
+  "checkAadharAvailability": {
+    "module": "applicant_registration",
+    "action": "view",
+    "desc": "Uniqueness check for Aadhaar number"
+  },
+  "getDashboardCounts": {
+    "module": "dashboard",
+    "action": "view",
+    "desc": "Dashboard statistics and summary counts"
+  },
+  "getAgentPermissions": {
+    "type": "ADMIN_ONLY",
+    "module": "agent_permission",
+    "action": "view",
+    "desc": "View permissions of an agent"
+  },
+  "setAgentPermissions": {
+    "type": "ADMIN_ONLY",
+    "module": "agent_permission",
+    "action": "update",
+    "desc": "Update permissions of an agent"
+  },
+  "addAgent": {
+    "module": "agent_registration",
+    "action": "create",
+    "desc": "Register a downline agent"
+  },
+  "getAgents": {
+    "module": "agent_registration",
+    "action": "view",
+    "desc": "List agents"
+  },
+  "getEligibleSeniors": {
+    "module": "agent_registration",
+    "action": "view",
+    "desc": "Dropdown list of eligible senior agents"
+  },
+  "editAgent": {
+    "module": "agent_registration",
+    "action": "update",
+    "desc": "Update agent profile"
+  },
+  "deleteAgent": {
+    "module": "agent_registration",
+    "action": "delete",
+    "desc": "Soft-delete agent profile"
+  },
+  "getAgentWiseReport": {
+    "type": "ADMIN_ONLY",
+    "module": "agent_commission",
+    "action": "view",
+    "desc": "Admin agent-wise commission audit report"
+  },
+  "createApplication": {
+    "module": "applicant_registration",
+    "action": "create",
+    "desc": "Create general marriage application"
+  },
+  "getApplications": {
+    "module": "applicant_registration",
+    "action": "view",
+    "desc": "List general marriage applications"
+  },
+  "updateApplication": {
+    "module": "applicant_registration",
+    "action": "update",
+    "desc": "Update general marriage application"
+  },
+  "deleteApplication": {
+    "module": "applicant_registration",
+    "action": "delete",
+    "desc": "Delete general marriage application"
+  },
+  "updateApplicationActiveStatus": {
+    "module": "applicant_registration",
+    "action": "update",
+    "desc": "Toggle general application active status"
+  },
+  "createInsuranceApplication": {
+    "module": "security_application",
+    "action": "create",
+    "desc": "Create insurance application"
+  },
+  "getInsuranceApplication": {
+    "module": "security_application",
+    "action": "view",
+    "desc": "List insurance applications"
+  },
+  "editInsuranceApplication": {
+    "module": "security_application",
+    "action": "update",
+    "desc": "Update insurance application"
+  },
+  "deleteInsuranceApplication": {
+    "module": "security_application",
+    "action": "delete",
+    "desc": "Delete insurance application"
+  },
+  "updateInsuranceApplicationActiveStatus": {
+    "module": "security_application",
+    "action": "update",
+    "desc": "Toggle insurance application active status"
+  },
+  "addSurakshaBima": {
+    "module": "suraksha_bima_yojana",
+    "action": "create",
+    "desc": "Add Suraksha Bima record"
+  },
+  "getSurakshaBimaList": {
+    "module": "suraksha_bima_yojana",
+    "action": "view",
+    "desc": "List Suraksha Bima records"
+  },
+  "getSurakshaBima": {
+    "module": "suraksha_bima_yojana",
+    "action": "view",
+    "desc": "Get single Suraksha Bima record"
+  },
+  "getSurakshaBimaData": {
+    "module": "suraksha_bima_yojana",
+    "action": "view",
+    "desc": "Get Suraksha Bima statistics"
+  },
+  "getPreviousSurakshaBimaMembers": {
+    "module": "suraksha_bima_yojana",
+    "action": "view",
+    "desc": "Get Suraksha Bima previous members"
+  },
+  "getSurakshaBimaPaymentById": {
+    "module": "suraksha_bima_yojana",
+    "action": "view",
+    "desc": "Get Suraksha Bima payment record"
+  },
+  "createSurakshaBimaPayment": {
+    "module": "suraksha_bima_yojana",
+    "action": "create",
+    "desc": "Create Suraksha Bima payment"
+  },
+  "editSurakshaBima": {
+    "module": "suraksha_bima_yojana",
+    "action": "update",
+    "desc": "Edit Suraksha Bima record"
+  },
+  "deleteSurakshaBima": {
+    "module": "suraksha_bima_yojana",
+    "action": "delete",
+    "desc": "Delete Suraksha Bima record"
+  },
+  "addMarriageCongrats": {
+    "module": "marriage_congratulations",
+    "action": "create",
+    "desc": "Create marriage congratulation record"
+  },
+  "getMarriageCongrats": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "List marriage congratulations"
+  },
+  "getMarriageCongratulations": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "Get marriage congratulations data"
+  },
+  "getMarriageDetailsByNumber": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "Get marriage congratulations details by form number"
+  },
+  "getPreviousApplicationsMembers": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "Get members from previous marriage applications"
+  },
+  "getMarriageCongratulationsPayment": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "Get marriage congratulations payment details"
+  },
+  "createMarriageCongratulationsPayment": {
+    "module": "marriage_congratulations",
+    "action": "create",
+    "desc": "Create marriage congratulations payment"
+  },
+  "getMarriageCongratulationsInstallments": {
+    "module": "marriage_congratulations",
+    "action": "view",
+    "desc": "Get marriage congratulations installments"
+  },
+  "addMarriageCongratulationsInstallment": {
+    "module": "marriage_congratulations",
+    "action": "create",
+    "desc": "Add marriage congratulations installment"
+  },
+  "editMarriageCongrats": {
+    "module": "marriage_congratulations",
+    "action": "update",
+    "desc": "Update marriage congratulations record"
+  },
+  "deleteMarriageCongrats": {
+    "module": "marriage_congratulations",
+    "action": "delete",
+    "desc": "Delete marriage congratulations record"
+  },
+  "deleteMarriageCongratulationsPayment": {
+    "module": "marriage_congratulations",
+    "action": "delete",
+    "desc": "Delete marriage congratulations payment"
+  },
+  "createmayra_Application": {
+    "module": "mayra_registration",
+    "action": "create",
+    "desc": "Create Mayra application"
+  },
+  "getmayra_application": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "List Mayra applications"
+  },
+  "updatemayra_Application": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Update Mayra application"
+  },
+  "deletemayra_Application": {
+    "module": "mayra_registration",
+    "action": "delete",
+    "desc": "Delete Mayra application"
+  },
+  "updateMayraApplicationActiveStatus": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Toggle Mayra application active status"
+  },
+  "getMayraDetailsByNumber": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Lookup Mayra details by form number"
+  },
+  "getMayraBeforeDate": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Lookup Mayra applications before a given date"
+  },
+  "getMayraPreviousMembers": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Get previous Mayra members"
+  },
+  "addMayraInstallment": {
+    "module": "mayra_registration",
+    "action": "create",
+    "desc": "Add Mayra installment"
+  },
+  "getMayraInstallments": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Get Mayra installments"
+  },
+  "updateMayraInstallment": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Update Mayra installment"
+  },
+  "deleteMayraInstallment": {
+    "module": "mayra_registration",
+    "action": "delete",
+    "desc": "Delete Mayra installment"
+  },
+  "addMayraCongrats": {
+    "module": "mayra_registration",
+    "action": "create",
+    "desc": "Add Mayra congratulations"
+  },
+  "getMayraCongrats": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "List Mayra congratulations"
+  },
+  "getMayraCongratulations": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Get Mayra congratulations details"
+  },
+  "updateMayraCongratulationsStatus": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Update Mayra congratulations status"
+  },
+  "createMayraCongratulationsPayment": {
+    "module": "mayra_registration",
+    "action": "create",
+    "desc": "Create Mayra congratulations payment"
+  },
+  "getMayraCongratulationsPayment": {
+    "module": "mayra_registration",
+    "action": "view",
+    "desc": "Get Mayra congratulations payment"
+  },
+  "deleteMayraCongratulationsPayment": {
+    "module": "mayra_registration",
+    "action": "delete",
+    "desc": "Delete Mayra congratulations payment"
+  },
+  "editMayraCongrats": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Edit Mayra congratulations"
+  },
+  "deleteMayraCongrats": {
+    "module": "mayra_registration",
+    "action": "delete",
+    "desc": "Delete Mayra congratulations"
+  },
+  "updateMayraCongratulationsPayment": {
+    "module": "mayra_registration",
+    "action": "update",
+    "desc": "Update Mayra congratulations payment"
+  },
+  "addLoanApplication": {
+    "module": "balika_loan_application",
+    "action": "create",
+    "desc": "Create Balika loan application"
+  },
+  "getLoanApplications": {
+    "module": "balika_loan_application",
+    "action": "view",
+    "desc": "List Balika loan applications"
+  },
+  "editLoanApplication": {
+    "module": "balika_loan_application",
+    "action": "update",
+    "desc": "Update Balika loan application"
+  },
+  "deleteLoanApplication": {
+    "module": "balika_loan_application",
+    "action": "delete",
+    "desc": "Delete Balika loan application"
+  },
+  "getLoanApplicationInstallments": {
+    "module": "balika_loan_application",
+    "action": "view",
+    "desc": "Get loan installments"
+  },
+  "addLoanApplicationInstallment": {
+    "module": "balika_loan_application",
+    "action": "create",
+    "desc": "Add loan installment"
+  },
+  "addFinancialHelp": {
+    "module": "financial_help",
+    "action": "create",
+    "desc": "Create Financial Help record"
+  },
+  "getFinancialHelps": {
+    "module": "financial_help",
+    "action": "view",
+    "desc": "List Financial Help records"
+  },
+  "editFinancialHelp": {
+    "module": "financial_help",
+    "action": "update",
+    "desc": "Update Financial Help record"
+  },
+  "deleteFinancialHelp": {
+    "module": "financial_help",
+    "action": "delete",
+    "desc": "Delete Financial Help record"
+  },
+  "getFinancialHelpInstallments": {
+    "module": "financial_help",
+    "action": "view",
+    "desc": "Get Financial Help installments"
+  },
+  "addFinancialHelpInstallment": {
+    "module": "financial_help",
+    "action": "create",
+    "desc": "Add Financial Help installment"
+  },
+  "getApplicationInstallments": {
+    "module": "general_application_payment",
+    "action": "view",
+    "desc": "List general application installments"
+  },
+  "addApplicationInstallment": {
+    "module": "general_application_payment",
+    "action": "create",
+    "desc": "Add general application installment"
+  },
+  "getApplicationInsuranceInstallments": {
+    "module": "insurance_application_payment",
+    "action": "view",
+    "desc": "List insurance application installments"
+  },
+  "addApplicationInsuranceInstallment": {
+    "module": "insurance_application_payment",
+    "action": "create",
+    "desc": "Add insurance application installment"
+  },
+  "getAllBulkData": {
+    "module": "bulk_marriage_emi",
+    "action": "view",
+    "desc": "Get bulk marriage EMI data"
+  },
+  "getUserData": {
+    "module": "bulk_marriage_emi",
+    "action": "view",
+    "desc": "Get bulk marriage user details"
+  },
+  "getAgentPendingEmi": {
+    "module": "bulk_marriage_emi",
+    "action": "view",
+    "desc": "Get pending marriage EMI for agent"
+  },
+  "generateBulkAgentPendingEmiPdf": {
+    "module": "bulk_marriage_emi",
+    "action": "view",
+    "desc": "Generate bulk pending EMI PDF"
+  },
+  "updatePaymentStatus": {
+    "module": "bulk_marriage_emi",
+    "action": "update",
+    "desc": "Update bulk marriage EMI payment status"
+  },
+  "updatePdfStatus": {
+    "module": "bulk_marriage_emi",
+    "action": "update",
+    "desc": "Update bulk marriage EMI PDF print status"
+  },
+  "getInsuranceBulkData": {
+    "module": "bulk_suraksha_bima_emi",
+    "action": "view",
+    "desc": "Get bulk insurance bima data"
+  },
+  "getAgentPendingBimaEmi": {
+    "module": "bulk_suraksha_bima_emi",
+    "action": "view",
+    "desc": "Get pending insurance bima EMI for agent"
+  },
+  "updateBimaPaymentStatus": {
+    "module": "bulk_suraksha_bima_emi",
+    "action": "update",
+    "desc": "Update bulk insurance bima payment status"
+  },
+  "updateInsurancePdfStatus": {
+    "module": "bulk_suraksha_bima_emi",
+    "action": "update",
+    "desc": "Update bulk insurance bima PDF status"
+  },
+  "getMayraBulkData": {
+    "module": "bulk_mayra_emi",
+    "action": "view",
+    "desc": "Get bulk Mayra EMI data"
+  },
+  "getMayraUserData": {
+    "module": "bulk_mayra_emi",
+    "action": "view",
+    "desc": "Get bulk Mayra user data"
+  },
+  "getMayraAgentPendingEmi": {
+    "module": "bulk_mayra_emi",
+    "action": "view",
+    "desc": "Get pending Mayra EMI for agent"
+  },
+  "updateMayraStatus": {
+    "module": "bulk_mayra_emi",
+    "action": "update",
+    "desc": "Update bulk Mayra EMI payment status"
+  },
+  "updateMayraPdfStatus": {
+    "module": "bulk_mayra_emi",
+    "action": "update",
+    "desc": "Update bulk Mayra PDF status"
+  },
+  "addPayment": {
+    "module": "payment_management",
+    "action": "create",
+    "desc": "Add cashbook payment entry"
+  },
+  "getPaymentList": {
+    "module": "payment_management",
+    "action": "view",
+    "desc": "List cashbook payments"
+  },
+  "editPayment": {
+    "module": "payment_management",
+    "action": "update",
+    "desc": "Update cashbook payment entry"
+  },
+  "deletePayment": {
+    "module": "payment_management",
+    "action": "delete",
+    "desc": "Delete cashbook payment entry"
+  },
+  "getAgentPaymentsForDetails": {
+    "module": "agent_commission_report",
+    "action": "view",
+    "desc": "View agent commission breakdown report"
+  },
+  "addAgentPaymentForDetails": {
+    "type": "ADMIN_ONLY",
+    "module": "agent_commission",
+    "action": "update",
+    "desc": "Disburse/record agent commission payout"
+  },
+  "addDisabilityCycle": {
+    "type": "ADMIN_ONLY",
+    "module": "disability_cycle_distribution",
+    "action": "create",
+    "desc": "Add disability cycle application"
+  },
+  "getDisabilityCycles": {
+    "type": "ADMIN_ONLY",
+    "module": "disability_cycle_distribution",
+    "action": "view",
+    "desc": "List disability cycle applications"
+  },
+  "editDisabilityCycle": {
+    "type": "ADMIN_ONLY",
+    "module": "disability_cycle_distribution",
+    "action": "update",
+    "desc": "Edit disability cycle application"
+  },
+  "deleteDisabilityCycle": {
+    "type": "ADMIN_ONLY",
+    "module": "disability_cycle_distribution",
+    "action": "delete",
+    "desc": "Delete disability cycle application"
+  },
+  "addMarriageSewing": {
+    "type": "ADMIN_ONLY",
+    "module": "marriage_sewing_machine_distribution",
+    "action": "create",
+    "desc": "Add marriage sewing machine distribution"
+  },
+  "getMarriageSewing": {
+    "type": "ADMIN_ONLY",
+    "module": "marriage_sewing_machine_distribution",
+    "action": "view",
+    "desc": "List marriage sewing machine distributions"
+  },
+  "editMarriageSewing": {
+    "type": "ADMIN_ONLY",
+    "module": "marriage_sewing_machine_distribution",
+    "action": "update",
+    "desc": "Edit marriage sewing machine distribution"
+  },
+  "deleteMarriageSewing": {
+    "type": "ADMIN_ONLY",
+    "module": "marriage_sewing_machine_distribution",
+    "action": "delete",
+    "desc": "Delete marriage sewing machine distribution"
+  },
+  "addPensionYojana": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "create",
+    "desc": "Add pension yojana registration"
+  },
+  "getPensionYojanas": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "view",
+    "desc": "List pension yojana registrations"
+  },
+  "getPensionYojanaPayments": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "view",
+    "desc": "List pension yojana payments"
+  },
+  "addPensionYojanaPayment": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "create",
+    "desc": "Add pension yojana payment"
+  },
+  "editPensionYojana": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "update",
+    "desc": "Edit pension yojana registration"
+  },
+  "deletePensionYojana": {
+    "type": "ADMIN_ONLY",
+    "module": "salakar_pension_yojana",
+    "action": "delete",
+    "desc": "Delete pension yojana registration"
+  },
+  "addSewingCamp": {
+    "type": "ADMIN_ONLY",
+    "module": "sewing_machine_camp",
+    "action": "create",
+    "desc": "Add sewing machine camp"
+  },
+  "getSewingCamp": {
+    "type": "ADMIN_ONLY",
+    "module": "sewing_machine_camp",
+    "action": "view",
+    "desc": "List sewing machine camps"
+  },
+  "editSewingCamp": {
+    "type": "ADMIN_ONLY",
+    "module": "sewing_machine_camp",
+    "action": "update",
+    "desc": "Edit sewing machine camp"
+  },
+  "deleteSewingCamp": {
+    "type": "ADMIN_ONLY",
+    "module": "sewing_machine_camp",
+    "action": "delete",
+    "desc": "Delete sewing machine camp"
+  }
+};
 
 router.all("/", upload.any(), async (req: Request, res: Response) => {
   const apicall = req.query.apicall || req.body.apicall;
@@ -177,6 +828,31 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
       user = decoded;
     } catch (err: any) {
       return res.status(200).json({ error: true, message: `Unauthorized - Invalid token: ${err.message}` });
+    }
+  }
+
+  // ── ENFORCE CANONICAL RBAC ON PROTECTED LEGACY APICALLS ──
+  const reqRule = APICALL_RBAC_MAP[apicall as string];
+  if (reqRule && !publicActions.includes(apicall as string)) {
+    if (reqRule.type === "ADMIN_ONLY") {
+      if (user?.role !== "ADMIN") {
+        return res.status(403).json({
+          status: false,
+          error: true,
+          success: false,
+          message: `Forbidden: Only administrators can access ${apicall}`,
+        });
+      }
+    } else if (reqRule.module && reqRule.action) {
+      const isAllowed = await hasAgentPermission(user, reqRule.module, reqRule.action);
+      if (!isAllowed) {
+        return res.status(403).json({
+          status: false,
+          error: true,
+          success: false,
+          message: `Forbidden: You do not have '${reqRule.action}' permission for module: ${reqRule.module}`,
+        });
+      }
     }
   }
 
@@ -282,6 +958,14 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
       }
 
       case "getAgentPermissions": {
+        if (user?.role !== "ADMIN") {
+          return res.status(403).json({
+            success: false,
+            status: false,
+            error: true,
+            message: "Forbidden: Admin access required for agent permissions",
+          });
+        }
         const agentId = payload.agent_id || payload.agentId;
         const permissions = await agentsService.getAgentPermissions(agentId);
         const formatted = permissions.map((perm: any) => {
@@ -292,12 +976,45 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           if (perm.canDelete) actions.push("delete");
           return { module: perm.module, actions };
         });
-        return res.json({ status: true, error: false, permissions: formatted });
+        return res.json({ success: true, status: true, error: false, permissions: formatted });
       }
 
       case "setAgentPermissions": {
+        if (user?.role !== "ADMIN") {
+          return res.status(403).json({
+            success: false,
+            status: false,
+            error: true,
+            message: "Forbidden: Admin access required for agent permissions",
+          });
+        }
         const agentId = payload.agent_id || payload.agentId;
         const rawPermissions = Array.isArray(payload.permissions) ? payload.permissions : [];
+
+        // Validate modules and actions strictly against canonical catalog
+        for (const perm of rawPermissions) {
+          const mod = String(perm.module || "").trim();
+          if (!isValidModule(mod) || !isAgentManageableModule(mod)) {
+            return res.status(400).json({
+              success: false,
+              status: false,
+              error: true,
+              message: `Unknown or unmanageable permission module: '${mod}'`,
+            });
+          }
+          const acts = Array.isArray(perm.actions) ? perm.actions : [];
+          for (const act of acts) {
+            if (!isValidAction(act)) {
+              return res.status(400).json({
+                success: false,
+                status: false,
+                error: true,
+                message: `Unknown permission action: '${act}' for module '${mod}'`,
+              });
+            }
+          }
+        }
+
         const mapped = rawPermissions.map((perm: any) => {
           const actions: string[] = Array.isArray(perm.actions) ? perm.actions : [];
           return {
@@ -308,8 +1025,9 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
             canDelete: actions.includes("delete"),
           };
         });
-        const result = await agentsService.updateAgentPermissions(agentId, mapped);
-        return res.json({ status: true, error: false, message: "Permissions updated successfully", data: result });
+        const meta = { ipAddress: req.ip, userAgent: req.get("user-agent") };
+        const result = await agentsService.updateAgentPermissions(agentId, mapped, user?.userId, meta);
+        return res.json({ success: true, status: true, error: false, message: "Permissions updated successfully", data: result });
       }
 
       case "getAllBulkData": {
@@ -754,7 +1472,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
       }
 
       case "editAgent": {
-        const result = await agentsService.updateAgent(payload.id, payload);
+        const result = await agentsService.updateAgent(payload.id, payload, user?.userId, user?.role);
         return res.json({
           status: true,
           error: false,
@@ -764,7 +1482,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
       }
 
       case "deleteAgent": {
-        const result = await agentsService.softDeleteAgent(payload.id);
+        const result = await agentsService.softDeleteAgent(payload.id, user?.userId, user?.role);
         return res.json({ status: true, error: false, message: "Agent deleted successfully", data: result });
       }
 
@@ -4302,6 +5020,10 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
     }
   } catch (err: any) {
     console.error(`Error in compatibility handler for [${apicall}]:`, err);
+    if (err instanceof ForbiddenError || err?.statusCode === 403) {
+      return res.status(403).json({ status: false, error: true, message: err.message });
+    }
+
     if (err instanceof NotFoundError) {
       return res.status(200).json({ status: false, error: true, message: err.message });
     }

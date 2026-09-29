@@ -25,23 +25,23 @@ router.use(authenticate as any);
 // ── LOANS ──────────────────────────────────────────
 router.post(
   "/loans",
-  checkPermission("applicant_registration", "create") as any,
+  checkPermission("balika_loan_application", "create") as any,
   validateRequest(createLoanSchema),
   controller.createLoan.bind(controller)
 );
 router.get(
   "/loans",
-  checkPermission("applicant_registration", "view") as any,
+  checkPermission("balika_loan_application", "view") as any,
   controller.getAllLoans.bind(controller)
 );
 router.get(
   "/loans/:id",
-  checkPermission("applicant_registration", "view") as any,
+  checkPermission("balika_loan_application", "view") as any,
   controller.getLoanById.bind(controller)
 );
 router.post(
   "/loans/:id/installments",
-  checkPermission("applicant_registration", "create") as any,
+  checkPermission("balika_loan_application", "create") as any,
   validateRequest(createLoanInstallmentSchema),
   controller.addLoanInstallment.bind(controller)
 );
@@ -49,13 +49,13 @@ router.post(
 // ── FINANCIAL HELP (DAN RASHI) ──────────────────────
 router.post(
   "/financial-help",
-  checkPermission("payment_management", "create") as any,
+  checkPermission("financial_help", "create") as any,
   validateRequest(createFinancialHelpSchema),
   controller.createFinancialHelp.bind(controller)
 );
 router.get(
   "/financial-help",
-  checkPermission("payment_management", "view") as any,
+  checkPermission("financial_help", "view") as any,
   controller.getAllFinancialHelps.bind(controller)
 );
 
@@ -163,19 +163,19 @@ router.get(
 
 router.get(
   "/marriage-congratulations/bulk/data",
-  checkPermission("marriage_congratulations_payment", "view") as any,
+  checkPermission("bulk_marriage_emi", "view") as any,
   controller.getMarriageCongratulationsBulkData.bind(controller)
 );
 
 router.post(
   "/marriage-congratulations/bulk/payments",
-  checkPermission("marriage_congratulations_payment", "create") as any,
+  checkPermission("bulk_marriage_emi", "update") as any,
   controller.updateMarriageCongratulationsBulkPayments.bind(controller)
 );
 
 router.post(
   "/marriage-congratulations/bulk/pdf-status",
-  checkPermission("marriage_congratulations_payment", "create") as any,
+  checkPermission("bulk_marriage_emi", "update") as any,
   controller.updateMarriageCongratulationsPdfStatus.bind(controller)
 );
 

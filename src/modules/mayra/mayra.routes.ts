@@ -107,21 +107,21 @@ router.get(
 // Get bulk congratulations list for payment mapping
 router.get(
   "/bulk/data",
-  checkPermission("mayra_registration", "view") as any,
+  checkPermission("bulk_mayra_emi", "view") as any,
   controller.getMayraBulkData.bind(controller)
 );
 
 // Process bulk payments for Mayra congratulations
 router.post(
   "/bulk/payments",
-  checkPermission("mayra_registration", "create") as any,
+  checkPermission("bulk_mayra_emi", "update") as any,
   controller.updateMayraBulkPayments.bind(controller)
 );
 
 // Update PDF status for Mayra congratulations
 router.post(
   "/bulk/pdf-status",
-  checkPermission("mayra_registration", "create") as any,
+  checkPermission("bulk_mayra_emi", "update") as any,
   controller.updateMayraPdfStatus.bind(controller)
 );
 

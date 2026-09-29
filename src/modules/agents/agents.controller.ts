@@ -116,7 +116,9 @@ export class AgentsController {
   public async softDeleteAgent(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      await agentsService.softDeleteAgent(id);
+      const deleterId = (req as any).user?.id || (req as any).user?.userId;
+      const deleterRole = (req as any).user?.role;
+      await agentsService.softDeleteAgent(id, deleterId, deleterRole);
       res.status(200).json({
         success: true,
         message: "Agent profile deleted successfully",
@@ -149,7 +151,9 @@ export class AgentsController {
     try {
       const { id } = req.params;
       const { permissions } = req.body;
-      const result = await agentsService.updateAgentPermissions(id, permissions);
+      const adminUserId = (req as any).user?.id || (req as any).user?.userId;
+      const meta = { ipAddress: req.ip, userAgent: req.get("user-agent") };
+      const result = await agentsService.updateAgentPermissions(id, permissions, adminUserId, meta);
       res.status(200).json({
         success: true,
         message: "Agent permissions updated successfully",

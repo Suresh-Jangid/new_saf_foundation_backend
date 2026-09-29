@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { EpinsController } from "./epins.controller";
 import { authenticate, authorizeRoles } from "../../middlewares/auth";
+import { checkPermission } from "../../middlewares/rbac";
 import { validateRequest } from "../../middlewares/validation";
 import {
   epinInventoryQuerySchema,
@@ -19,6 +20,7 @@ const controller = new EpinsController();
 router.get(
   "/",
   authenticate as any,
+  checkPermission("epin_management", "view") as any,
   validateRequest(epinInventoryQuerySchema),
   controller.getInventory.bind(controller)
 );
@@ -70,6 +72,7 @@ router.post(
 router.get(
   "/audit",
   authenticate as any,
+  checkPermission("epin_management", "view") as any,
   validateRequest(epinAuditQuerySchema),
   controller.getAuditHistory.bind(controller)
 );

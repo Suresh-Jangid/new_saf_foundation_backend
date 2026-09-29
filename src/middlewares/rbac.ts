@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import { prisma } from "../config/db";
 import { AuthenticatedRequest } from "./auth";
 import { ForbiddenError } from "../utils/errors";
+import { getModuleWithAliases } from "../config/permissions";
 
 export const checkPermission = (
   module: string,
@@ -26,14 +27,19 @@ export const checkPermission = (
       }
 
       const agentId = req.user.userId;
+      const allModuleKeys = getModuleWithAliases(module);
 
-      // Query database for agent permission record
-      const permission = await prisma.agentPermission.findUnique({
+      // Query database for agent permission record across canonical and alias keys
+      const permission = await prisma.agentPermission.findFirst({
         where: {
-          userId_module: {
-            userId: agentId,
-            module: module,
-          },
+          userId: agentId,
+          module: { in: allModuleKeys },
+          OR: [
+            { canView: true },
+            { canCreate: true },
+            { canUpdate: true },
+            { canDelete: true },
+          ],
         },
       });
 

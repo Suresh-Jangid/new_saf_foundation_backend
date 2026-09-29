@@ -12,14 +12,14 @@ const controller = new AgentsController();
 router.use(authenticate as any);
 
 // Retrieve all agents
-router.get("/", controller.getAllAgents.bind(controller));
+router.get("/", checkPermission("agent_registration", "view") as any, controller.getAllAgents.bind(controller));
 
 // Retrieve eligible Senior Agents for dropdown
-router.get("/seniors/eligible", controller.getEligibleSeniors.bind(controller));
-router.get("/eligible-seniors", controller.getEligibleSeniors.bind(controller));
+router.get("/seniors/eligible", checkPermission("agent_registration", "view") as any, controller.getEligibleSeniors.bind(controller));
+router.get("/eligible-seniors", checkPermission("agent_registration", "view") as any, controller.getEligibleSeniors.bind(controller));
 
 // Retrieve single agent
-router.get("/:id", controller.getAgentById.bind(controller));
+router.get("/:id", checkPermission("agent_registration", "view") as any, controller.getAgentById.bind(controller));
 
 // Register a new agent (Admin or Authorized Agent with agent_registration create permission)
 router.post(
@@ -29,10 +29,10 @@ router.post(
   controller.createAgent.bind(controller)
 );
 
-// Update agent profile (Admin Only)
+// Update agent profile (Admin or Authorized Agent with agent_registration update permission)
 router.put(
   "/:id",
-  authorizeRoles("ADMIN") as any,
+  checkPermission("agent_registration", "update") as any,
   validateRequest(updateAgentSchema),
   controller.updateAgent.bind(controller)
 );
@@ -44,15 +44,19 @@ router.post(
   controller.toggleAgentStatus.bind(controller)
 );
 
-// Soft Delete agent (Admin Only)
+// Soft Delete agent (Admin or Authorized Agent with agent_registration delete permission)
 router.delete(
   "/:id",
-  authorizeRoles("ADMIN") as any,
+  checkPermission("agent_registration", "delete") as any,
   controller.softDeleteAgent.bind(controller)
 );
 
 // Get agent permissions
-router.get("/:id/permissions", controller.getAgentPermissions.bind(controller));
+router.get(
+  "/:id/permissions",
+  authorizeRoles("ADMIN") as any,
+  controller.getAgentPermissions.bind(controller)
+);
 
 // Update agent permissions (Admin Only)
 router.put(

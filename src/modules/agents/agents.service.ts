@@ -1,3 +1,4 @@
+import { resolveCanonicalModule, getModuleWithAliases, isValidModule, isAgentManageableModule, isValidAction } from '../../config/permissions';
 import bcrypt from "bcryptjs";
 import { prisma, PRISMA_TX_OPTIONS } from "../../config/db";
 import { BadRequestError, NotFoundError, ForbiddenError } from "../../utils/errors";
@@ -642,18 +643,48 @@ export class AgentsService {
   /**
    * Update Agent Profile details and Hierarchy
    */
-  public async updateAgent(id: string, data: any, modifierId?: string, modifierRole?: string) {
-    if (modifierRole && modifierRole !== Role.ADMIN) {
-      throw new ForbiddenError("Forbidden: Only administrators can update agent profiles");
+  
+  public async isAgentInDownline(targetAgentId: string, parentAgentId: string): Promise<boolean> {
+    if (!targetAgentId || !parentAgentId || !isValidUuid(targetAgentId) || !isValidUuid(parentAgentId)) {
+      return false;
     }
+    const rows = await prisma.$queryRawUnsafe<Array<{ agent_id: string }>>(
+      `WITH RECURSIVE downline_tree AS (
+         SELECT agent_id FROM agent_hierarchies WHERE parent_agent_id = $1::uuid
+         UNION ALL
+         SELECT ah.agent_id FROM agent_hierarchies ah JOIN downline_tree dt ON ah.parent_agent_id = dt.agent_id
+       )
+       SELECT agent_id FROM downline_tree WHERE agent_id = $2::uuid LIMIT 1;`,
+      parentAgentId,
+      targetAgentId
+    );
+    return rows.length > 0;
+  }
 
+  public async updateAgent(id: string, data: any, modifierId?: string, modifierRole?: string) {
     const user = await prisma.user.findFirst({
-      where: { id, role: Role.AGENT, deletedAt: null },
+      where: { id, deletedAt: null },
       include: { agentProfile: true },
     });
 
     if (!user) {
       throw new NotFoundError("Agent not found");
+    }
+
+    if (modifierRole && modifierRole !== Role.ADMIN) {
+      if (user.role === Role.ADMIN) {
+        throw new ForbiddenError("Forbidden: Agents cannot update administrator accounts");
+      }
+      const isSelf = id === modifierId;
+      if (!isSelf) {
+        if (!modifierId) {
+          throw new ForbiddenError("Forbidden: Missing modifier identity");
+        }
+        const inDownline = await this.isAgentInDownline(id, modifierId);
+        if (!inDownline) {
+          throw new ForbiddenError("Forbidden: You can only update agent profiles within your own downline hierarchy");
+        }
+      }
     }
 
     let passwordHash = user.passwordHash;
@@ -851,7 +882,7 @@ export class AgentsService {
    */
   public async toggleAgentStatus(id: string) {
     const user = await prisma.user.findFirst({
-      where: { id, role: Role.AGENT, deletedAt: null },
+      where: { id, deletedAt: null },
     });
 
     if (!user) {
@@ -874,13 +905,29 @@ export class AgentsService {
   /**
    * Soft Delete Agent (sets deletedAt)
    */
-  public async softDeleteAgent(id: string) {
+  public async softDeleteAgent(id: string, deleterId?: string, deleterRole?: string) {
     const user = await prisma.user.findFirst({
-      where: { id, role: Role.AGENT, deletedAt: null },
+      where: { id, deletedAt: null },
     });
 
     if (!user) {
       throw new NotFoundError("Agent not found");
+    }
+
+    if (deleterRole && deleterRole !== Role.ADMIN) {
+      if (user.role === Role.ADMIN) {
+        throw new ForbiddenError("Forbidden: Agents cannot delete administrator accounts");
+      }
+      if (id === deleterId) {
+        throw new ForbiddenError("Forbidden: Agents cannot delete their own account");
+      }
+      if (!deleterId) {
+        throw new ForbiddenError("Forbidden: Missing deleter identity");
+      }
+      const inDownline = await this.isAgentInDownline(id, deleterId);
+      if (!inDownline) {
+        throw new ForbiddenError("Forbidden: You can only delete agents within your own downline hierarchy");
+      }
     }
 
     return prisma.$transaction(async (tx) => {
@@ -1144,7 +1191,7 @@ export class AgentsService {
   }
 
   /**
-   * Retrieve configured Permissions for a specific Agent
+   * Retrieve configured Permissions for a specific Agent with canonical module keys and active actions
    */
   public async getAgentPermissions(id: string) {
     const agent = await prisma.user.findFirst({
@@ -1155,15 +1202,43 @@ export class AgentsService {
       throw new NotFoundError("Agent not found");
     }
 
-    return prisma.agentPermission.findMany({
-      where: { userId: id },
+    const rows = await prisma.agentPermission.findMany({
+      where: {
+        userId: id,
+        OR: [
+          { canView: true },
+          { canCreate: true },
+          { canUpdate: true },
+          { canDelete: true },
+        ],
+      },
+      orderBy: { module: "asc" },
+    });
+
+    return rows.map((row) => {
+      const actions: string[] = [];
+      if (row.canView) actions.push("view");
+      if (row.canCreate) actions.push("create");
+      if (row.canUpdate) actions.push("update");
+      if (row.canDelete) actions.push("delete");
+      return {
+        ...row,
+        module: resolveCanonicalModule(row.module),
+        actions,
+      };
     });
   }
 
   /**
-   * Bulk updates Permissions for a specific Agent
+   * Fully synchronizes Permissions for a specific Agent with transaction atomicity,
+   * safe row removal for deactivated permissions, canonical resolution, and audit logging.
    */
-  public async updateAgentPermissions(id: string, permissions: any[]) {
+  public async updateAgentPermissions(
+    id: string,
+    permissions: any[],
+    adminUserId?: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ) {
     const agent = await prisma.user.findFirst({
       where: { id, role: Role.AGENT, deletedAt: null },
     });
@@ -1172,35 +1247,213 @@ export class AgentsService {
       throw new NotFoundError("Agent not found");
     }
 
-    return prisma.$transaction(async (tx) => {
-      const updatePromises = permissions.map((perm) =>
-        tx.agentPermission.upsert({
-          where: {
-            userId_module: {
-              userId: id,
-              module: perm.module,
-            },
-          },
-          update: {
-            canView: perm.canView,
-            canCreate: perm.canCreate,
-            canUpdate: perm.canUpdate,
-            canDelete: perm.canDelete,
-          },
-          create: {
-            userId: id,
-            module: perm.module,
-            canView: perm.canView,
-            canCreate: perm.canCreate,
-            canUpdate: perm.canUpdate,
-            canDelete: perm.canDelete,
-          },
-        }),
-      );
+    // 1. Normalize and canonicalize all submitted permissions
+    const normalizedMap = new Map<
+      string,
+      { canView: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean; actions: string[] }
+    >();
 
-      await Promise.all(updatePromises);
-      return tx.agentPermission.findMany({
+    const rawList = Array.isArray(permissions) ? permissions : [];
+    for (const item of rawList) {
+      const rawModule = String(item.module || "").trim();
+      if (!rawModule) continue;
+
+      const canonicalMod = resolveCanonicalModule(rawModule);
+      if (!isValidModule(canonicalMod) || !isAgentManageableModule(canonicalMod)) {
+        throw new BadRequestError(`Invalid or unmanageable permission module: '${rawModule}'`);
+      }
+
+      let canView = false;
+      let canCreate = false;
+      let canUpdate = false;
+      let canDelete = false;
+
+      if (Array.isArray(item.actions)) {
+        for (const act of item.actions) {
+          if (!isValidAction(act)) {
+            throw new BadRequestError(`Unknown permission action: '${act}' for module '${rawModule}'`);
+          }
+          if (act === "view") canView = true;
+          if (act === "create") canCreate = true;
+          if (act === "update") canUpdate = true;
+          if (act === "delete") canDelete = true;
+        }
+      } else {
+        canView = Boolean(item.canView);
+        canCreate = Boolean(item.canCreate);
+        canUpdate = Boolean(item.canUpdate);
+        canDelete = Boolean(item.canDelete);
+      }
+
+      const actions: string[] = [];
+      if (canView) actions.push("view");
+      if (canCreate) actions.push("create");
+      if (canUpdate) actions.push("update");
+      if (canDelete) actions.push("delete");
+
+      normalizedMap.set(canonicalMod, {
+        canView,
+        canCreate,
+        canUpdate,
+        canDelete,
+        actions,
+      });
+    }
+
+    return prisma.$transaction(async (tx) => {
+      // 2. Fetch existing permissions for delta tracking
+      const existingRows = await tx.agentPermission.findMany({
         where: { userId: id },
+      });
+
+      const oldPermissionsByCanonical: Record<string, string[]> = {};
+      existingRows.forEach((row) => {
+        const canonical = resolveCanonicalModule(row.module);
+        const acts: string[] = [];
+        if (row.canView) acts.push("view");
+        if (row.canCreate) acts.push("create");
+        if (row.canUpdate) acts.push("update");
+        if (row.canDelete) acts.push("delete");
+        // If row already had actions, merge
+        const prev = oldPermissionsByCanonical[canonical] || [];
+        oldPermissionsByCanonical[canonical] = Array.from(new Set([...prev, ...acts]));
+      });
+
+      // 3. Full Synchronization:
+      // A module is granted if any of view/create/update/delete is true.
+      // If granted -> upsert canonical row and prune legacy alias rows.
+      // If ungranted/cleared -> delete row.
+      for (const [canonicalMod, perms] of normalizedMap.entries()) {
+        const hasAnyAction = perms.canView || perms.canCreate || perms.canUpdate || perms.canDelete;
+        const allKeys = getModuleWithAliases(canonicalMod);
+
+        if (hasAnyAction) {
+          // Upsert canonical record
+          await tx.agentPermission.upsert({
+            where: {
+              userId_module: {
+                userId: id,
+                module: canonicalMod,
+              },
+            },
+            update: {
+              canView: perms.canView,
+              canCreate: perms.canCreate,
+              canUpdate: perms.canUpdate,
+              canDelete: perms.canDelete,
+            },
+            create: {
+              userId: id,
+              module: canonicalMod,
+              canView: perms.canView,
+              canCreate: perms.canCreate,
+              canUpdate: perms.canUpdate,
+              canDelete: perms.canDelete,
+            },
+          });
+
+          // Deactivate any legacy alias rows for this agent
+          const legacyAliases = allKeys.filter((k) => k !== canonicalMod);
+          if (legacyAliases.length > 0) {
+            await tx.agentPermission.updateMany({
+              where: {
+                userId: id,
+                module: { in: legacyAliases },
+              },
+              data: {
+                canView: false,
+                canCreate: false,
+                canUpdate: false,
+                canDelete: false,
+              },
+            });
+          }
+        } else {
+          // Explicitly cleared module -> deactivate all rows for this module & aliases
+          await tx.agentPermission.updateMany({
+            where: {
+              userId: id,
+              module: { in: allKeys },
+            },
+            data: {
+              canView: false,
+              canCreate: false,
+              canUpdate: false,
+              canDelete: false,
+            },
+          });
+        }
+      }
+
+      // 4. Audit Log Delta Tracking
+      const newPermissionsByCanonical: Record<string, string[]> = {};
+      normalizedMap.forEach((val, mod) => {
+        if (val.actions.length > 0) {
+          newPermissionsByCanonical[mod] = val.actions;
+        }
+      });
+
+      const changedModules: string[] = [];
+      const allAuditedModules = new Set([
+        ...Object.keys(oldPermissionsByCanonical),
+        ...Object.keys(newPermissionsByCanonical),
+      ]);
+
+      allAuditedModules.forEach((mod) => {
+        const oldActs = (oldPermissionsByCanonical[mod] || []).slice().sort().join(",");
+        const newActs = (newPermissionsByCanonical[mod] || []).slice().sort().join(",");
+        if (oldActs !== newActs) {
+          changedModules.push(mod);
+        }
+      });
+
+      if (changedModules.length > 0 && adminUserId) {
+        const oldValues: Record<string, string[]> = {};
+        const newValues: Record<string, string[]> = {};
+        changedModules.forEach((mod) => {
+          oldValues[mod] = oldPermissionsByCanonical[mod] || [];
+          newValues[mod] = newPermissionsByCanonical[mod] || [];
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: "PERMISSION_CHANGE",
+            entityName: "AgentPermission",
+            entityId: id,
+            oldValues,
+            newValues,
+            ipAddress: meta?.ipAddress || null,
+            userAgent: meta?.userAgent || null,
+          },
+        });
+      }
+
+      // Return refreshed active permissions formatted with canonical modules and actions
+      const updatedRows = await tx.agentPermission.findMany({
+        where: {
+          userId: id,
+          OR: [
+            { canView: true },
+            { canCreate: true },
+            { canUpdate: true },
+            { canDelete: true },
+          ],
+        },
+        orderBy: { module: "asc" },
+      });
+
+      return updatedRows.map((row) => {
+        const actions: string[] = [];
+        if (row.canView) actions.push("view");
+        if (row.canCreate) actions.push("create");
+        if (row.canUpdate) actions.push("update");
+        if (row.canDelete) actions.push("delete");
+        return {
+          ...row,
+          module: resolveCanonicalModule(row.module),
+          actions,
+        };
       });
     }, PRISMA_TX_OPTIONS);
   }

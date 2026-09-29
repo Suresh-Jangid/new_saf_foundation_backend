@@ -1,3 +1,4 @@
+import { isValidModule, isAgentManageableModule, isValidAction, VALID_ACTIONS } from '../../config/permissions';
 import { z } from "zod";
 
 const genderSchema = z.preprocess((val) => {
@@ -161,16 +162,50 @@ export const updateAgentSchema = z.object({
   }),
 });
 
+const singlePermissionItemSchema = z
+  .object({
+    module: z
+      .string({ required_error: 'Module key is required' })
+      .trim()
+      .min(1, 'Module key cannot be empty')
+      .refine(
+        (mod) => isValidModule(mod),
+        (mod) => ({ message: `Unknown permission module: '${mod}'. Not recognized in canonical permission catalog.` })
+      )
+      .refine(
+        (mod) => isAgentManageableModule(mod),
+        (mod) => ({ message: `Module '${mod}' is not assignable to agents (admin-only or disabled).` })
+      ),
+    canView: z.boolean().optional(),
+    canCreate: z.boolean().optional(),
+    canUpdate: z.boolean().optional(),
+    canDelete: z.boolean().optional(),
+    actions: z
+      .array(
+        z.string().trim().refine(
+          (act) => isValidAction(act),
+          (act) => ({ message: `Unknown permission action: '${act}'. Allowed actions: ${VALID_ACTIONS.join(', ')}` })
+        )
+      )
+      .optional(),
+  })
+  .refine(
+    (item) => {
+      return (
+        typeof item.canView === 'boolean' ||
+        typeof item.canCreate === 'boolean' ||
+        typeof item.canUpdate === 'boolean' ||
+        typeof item.canDelete === 'boolean' ||
+        Array.isArray(item.actions)
+      );
+    },
+    { message: 'Each permission must provide boolean action flags (canView, canCreate, etc.) or an actions array.' }
+  );
+
 export const updatePermissionsSchema = z.object({
   body: z.object({
-    permissions: z.array(
-      z.object({
-        module: z.string(),
-        canView: z.boolean(),
-        canCreate: z.boolean(),
-        canUpdate: z.boolean(),
-        canDelete: z.boolean(),
-      })
-    ),
+    permissions: z.array(singlePermissionItemSchema, {
+      required_error: 'Permissions array is required',
+    }),
   }),
 });

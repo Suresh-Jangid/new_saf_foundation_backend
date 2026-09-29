@@ -34,7 +34,7 @@ router.get(
 // Fetch commission report metrics (Admin or authorized agent)
 router.get(
   "/commission/report",
-  checkPermission("payment_management", "view") as any,
+  checkPermission("agent_commission_report", "view") as any,
   controller.getAgentCommissionReport.bind(controller)
 );
 
