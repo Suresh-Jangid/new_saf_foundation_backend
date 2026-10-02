@@ -92,3 +92,7 @@ apprunner.yaml
 check_agent_deps.js
 check_mc_counts.js
 financial_audit.js
+
+# Test rendered PDF and viewers
+public/pdf/**/rendered_*
+public/pdf/**/viewer.html
