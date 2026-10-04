@@ -271,6 +271,12 @@ export function mapGeneralApplicationRecord(app: Record<string, any>) {
     seniorName,
     nomineeAadhar: app.nomineeAadhar ?? app.nomineeAadhaar ?? app.nominee_aadhar ?? "",
     nomineeMobile: app.nomineeMobile ?? app.nomineePhone ?? app.nominee_mobile ?? "",
+    nomineePhotoUrl: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
+    nominee_photo_url: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
+    nomineePhoto: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
+    nominee_photo: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
+    nomineePassportPhoto: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
+    nominee_passport_photo: app.nomineePhotoUrl ?? app.nominee_photo_url ?? app.nomineePassportPhoto ?? app.nomineePhoto ?? null,
     installmentAmount:
       app.installmentAmount !== undefined && app.installmentAmount !== null
         ? Number(app.installmentAmount)

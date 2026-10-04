@@ -194,6 +194,31 @@ function resolveUpdatedPhotoUrl(
   return saveImagePayload(currentUrl) ?? null;
 }
 
+function resolveUpdatedNomineePhotoUrl(
+  data: Record<string, unknown>,
+  currentUrl: string | null | undefined
+): string | null {
+  if (data.removeNomineePhoto === true || data.clearNomineePhoto === true || data.deleteNomineePhoto === true) {
+    return null;
+  }
+  const candidates = [
+    data.nomineePhotoUrl,
+    data.nomineePassportPhoto,
+    data.nomineePhoto,
+    data.nominee_photo,
+    data.nominee_passport_photo,
+    data.nominee_photo_url,
+    data.existingNomineePhoto,
+    data.existingNomineePhotoUrl,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return saveImagePayload(value.trim());
+    }
+  }
+  return currentUrl ? (saveImagePayload(currentUrl) ?? null) : null;
+}
+
 // Boys and girls get separate account-code sequences (like the legacy software):
 // Female -> F-001, Male -> M-001, each counting only its own gender so the two
 // streams stay independent.
@@ -292,6 +317,22 @@ export class ApplicationsService {
           throw new BadRequestError("Nominee Mobile must be between 10 and 15 digits");
         }
         return cleaned;
+      })(),
+      nomineePhotoUrl: (() => {
+        const candidates = [
+          data.nomineePhotoUrl,
+          data.nomineePassportPhoto,
+          data.nomineePhoto,
+          data.nominee_photo,
+          data.nominee_passport_photo,
+          data.nominee_photo_url,
+        ];
+        for (const val of candidates) {
+          if (typeof val === "string" && val.trim()) {
+            return saveImagePayload(val.trim());
+          }
+        }
+        return null;
       })(),
       affidavitUrl: saveImagePayload(data.affidavitUrl || data.affidavit || data.affidavit_url),
       passportPhotoUrl: saveImagePayload(data.passportPhotoUrl || data.passportPhoto || data.passport_photo || data.photo),
@@ -720,6 +761,7 @@ export class ApplicationsService {
           ? { addedById: String(addedByCandidate) }
           : {}),
         passportPhotoUrl: resolveUpdatedPhotoUrl(data, app.passportPhotoUrl),
+        nomineePhotoUrl: resolveUpdatedNomineePhotoUrl(data, app.nomineePhotoUrl),
         affidavitUrl:
           data.affidavit !== undefined && data.affidavit !== ""
             ? data.affidavit
