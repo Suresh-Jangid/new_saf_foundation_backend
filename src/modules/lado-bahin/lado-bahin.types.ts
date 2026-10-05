@@ -49,9 +49,14 @@ export interface CreateLadoBahinInput {
   schemeType?: string;
   pool?: string;
   membershipFee?: number;
+  totalAmount?: number;
   epinCode?: string | null;
   pinNumber?: string | null;
+  epin?: string | null;
   selectedAgentId?: string | null;
+  addedById?: string | null;
+  agentId?: string | null;
+  addedby_id?: string | null;
   initialAccountType?: LadoBahinAccountType | string | null;
   paymentAmount?: number | null;
   paymentMode?: PaymentMode | string;
@@ -90,6 +95,16 @@ export interface UpdateLadoBahinInput {
   affidavitUrl?: string | null;
   gender?: Gender | string;
   category?: ApplicationCategory | string;
+  selectedAgentId?: string | null;
+  addedById?: string | null;
+  agentId?: string | null;
+  addedby_id?: string | null;
+  epinCode?: string | null;
+  epin?: string | null;
+  pinNumber?: string | null;
+  membershipFee?: number | null;
+  totalAmount?: number | null;
+  pendingAmount?: number | null;
 }
 
 export interface LadoBahinInstallmentInput {

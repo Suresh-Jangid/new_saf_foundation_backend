@@ -12,6 +12,7 @@ import { parseDateInput, parseOptionalDateInput } from "../../utils/parse-date";
 import { saveImagePayload } from "../../utils/file-upload";
 import { WhatsAppService } from "../../utils/whatsapp";
 import { EpinsService } from "../epins/epins.service";
+import { isValidUuid, resolveAgentSeniorHierarchyBatch } from "../../utils/compat-helpers";
 import {
   LADO_BAHIN_FORM_PREFIX,
   LADO_BAHIN_MEMBERSHIP_FEE,
@@ -105,6 +106,204 @@ export function computeLadoBahinFinancialSummary(
       pending: 0,
     },
   };
+}
+
+async function enrichLadoBahinRecord(record: any) {
+  if (!record) return record;
+
+  let workerCode = "ADMIN";
+  let workerName = record.addedBy?.name || "Super Admin";
+  let workerMobile = record.addedBy?.mobile || "";
+  let workerOfflineFormNumber = "";
+  let seniorCode = "ADMIN";
+  let seniorName = "Super Admin";
+  let seniorOfflineFormNumber = "ADMIN";
+  let parentAgentId = null;
+
+  if (record.addedById) {
+    const hierarchyMap = await resolveAgentSeniorHierarchyBatch([record.addedById]);
+    const hierarchy = hierarchyMap.get(record.addedById);
+    const isAdmin =
+      record.addedBy?.role === "ADMIN" ||
+      record.addedBy?.name === "Default Agent" ||
+      record.addedBy?.name === "Super Admin";
+    const agentEmployeeId = record.addedBy?.agentProfile?.employeeId || "";
+    workerOfflineFormNumber = record.addedBy?.agentProfile?.offlineFormNumber || "";
+
+    let rawWorkerCode = record.workerCode;
+    if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+      if (isAdmin || !workerOfflineFormNumber) {
+        rawWorkerCode = "ADMIN";
+      } else {
+        rawWorkerCode = workerOfflineFormNumber || agentEmployeeId || "ADMIN";
+      }
+    }
+    workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+    workerName =
+      record.workerName ||
+      record.addedBy?.name ||
+      (isAdmin ? record.addedBy?.name || "Super Admin" : "Super Admin");
+    workerMobile = record.workerMobile || record.addedBy?.mobile || "";
+
+    if (hierarchy && hierarchy.seniorCode && hierarchy.seniorCode !== "ADMIN") {
+      seniorCode = hierarchy.seniorCode;
+      seniorName = hierarchy.seniorName;
+      seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+      parentAgentId = hierarchy.parentAgentId;
+    } else if (hierarchy) {
+      seniorCode = hierarchy.seniorCode || "ADMIN";
+      seniorName = hierarchy.seniorName || "Super Admin";
+      seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || seniorCode || "ADMIN";
+      parentAgentId = hierarchy.parentAgentId || null;
+    } else if (isAdmin) {
+      seniorCode = "ADMIN";
+      seniorName = "Super Admin";
+      seniorOfflineFormNumber = "ADMIN";
+      parentAgentId = null;
+    } else {
+      seniorCode = "ADMIN";
+      seniorName = "Super Admin";
+      seniorOfflineFormNumber = "ADMIN";
+      parentAgentId = null;
+    }
+  }
+
+  const resolvedWorkerOfflineForm =
+    workerOfflineFormNumber || (workerCode === "ADMIN" ? "ADMIN" : "");
+
+  return {
+    ...record,
+    selectedAgentId: record.addedById,
+    addedById: record.addedById,
+    epinCode: record.epinCode,
+    workerName,
+    karyakartaName: workerName,
+    workerMobile,
+    workerCode,
+    worker_code: workerCode,
+    karyakartaCode: workerCode,
+    agentCode: workerCode,
+    agent_code: workerCode,
+    workerOfflineFormNumber: resolvedWorkerOfflineForm,
+    worker_offline_form_number: resolvedWorkerOfflineForm,
+    agentOfflineFormNumber: resolvedWorkerOfflineForm,
+    agent_offline_form_number: resolvedWorkerOfflineForm,
+    seniorCode,
+    senior_code: seniorCode,
+    uplineCode: seniorCode,
+    upline_code: seniorCode,
+    seniorOfflineFormNumber,
+    senior_offline_form_number: seniorOfflineFormNumber,
+    seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+    senior_agent_offline_form_number: seniorOfflineFormNumber,
+    seniorName,
+    senior_name: seniorName,
+    seniorWorker: seniorName,
+    senior_worker: seniorName,
+    parentAgentId,
+    parent_agent_id: parentAgentId,
+  };
+}
+
+async function enrichLadoBahinList(records: any[]) {
+  if (!Array.isArray(records) || records.length === 0) return records;
+
+  const addedByIds = records.map((r: any) => r.addedById).filter(Boolean);
+  const hierarchyMap = await resolveAgentSeniorHierarchyBatch(addedByIds);
+
+  return records.map((record: any) => {
+    let workerCode = "ADMIN";
+    let workerName = record.addedBy?.name || "Super Admin";
+    let workerMobile = record.addedBy?.mobile || "";
+    let workerOfflineFormNumber = "";
+    let seniorCode = "ADMIN";
+    let seniorName = "Super Admin";
+    let seniorOfflineFormNumber = "ADMIN";
+    let parentAgentId = null;
+
+    if (record.addedById) {
+      const hierarchy = hierarchyMap.get(record.addedById);
+      const isAdmin =
+        record.addedBy?.role === "ADMIN" ||
+        record.addedBy?.name === "Default Agent" ||
+        record.addedBy?.name === "Super Admin";
+      const agentEmployeeId = record.addedBy?.agentProfile?.employeeId || "";
+      workerOfflineFormNumber = record.addedBy?.agentProfile?.offlineFormNumber || "";
+
+      let rawWorkerCode = record.workerCode;
+      if (!rawWorkerCode || isValidUuid(rawWorkerCode)) {
+        if (isAdmin || !workerOfflineFormNumber) {
+          rawWorkerCode = "ADMIN";
+        } else {
+          rawWorkerCode = workerOfflineFormNumber || agentEmployeeId || "ADMIN";
+        }
+      }
+      workerCode = rawWorkerCode || (isAdmin ? "ADMIN" : "ADMIN");
+      workerName =
+        record.workerName ||
+        record.addedBy?.name ||
+        (isAdmin ? record.addedBy?.name || "Super Admin" : "Super Admin");
+      workerMobile = record.workerMobile || record.addedBy?.mobile || "";
+
+      if (hierarchy && hierarchy.seniorCode && hierarchy.seniorCode !== "ADMIN") {
+        seniorCode = hierarchy.seniorCode;
+        seniorName = hierarchy.seniorName;
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || hierarchy.seniorCode;
+        parentAgentId = hierarchy.parentAgentId;
+      } else if (hierarchy) {
+        seniorCode = hierarchy.seniorCode || "ADMIN";
+        seniorName = hierarchy.seniorName || "Super Admin";
+        seniorOfflineFormNumber = hierarchy.seniorOfflineFormNumber || seniorCode || "ADMIN";
+        parentAgentId = hierarchy.parentAgentId || null;
+      } else if (isAdmin) {
+        seniorCode = "ADMIN";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "ADMIN";
+        parentAgentId = null;
+      } else {
+        seniorCode = "ADMIN";
+        seniorName = "Super Admin";
+        seniorOfflineFormNumber = "ADMIN";
+        parentAgentId = null;
+      }
+    }
+
+    const resolvedWorkerOfflineForm =
+      workerOfflineFormNumber || (workerCode === "ADMIN" ? "ADMIN" : "");
+
+    return {
+      ...record,
+      selectedAgentId: record.addedById,
+      addedById: record.addedById,
+      epinCode: record.epinCode,
+      workerName,
+      karyakartaName: workerName,
+      workerMobile,
+      workerCode,
+      worker_code: workerCode,
+      karyakartaCode: workerCode,
+      agentCode: workerCode,
+      agent_code: workerCode,
+      workerOfflineFormNumber: resolvedWorkerOfflineForm,
+      worker_offline_form_number: resolvedWorkerOfflineForm,
+      agentOfflineFormNumber: resolvedWorkerOfflineForm,
+      agent_offline_form_number: resolvedWorkerOfflineForm,
+      seniorCode,
+      senior_code: seniorCode,
+      uplineCode: seniorCode,
+      upline_code: seniorCode,
+      seniorOfflineFormNumber,
+      senior_offline_form_number: seniorOfflineFormNumber,
+      seniorAgentOfflineFormNumber: seniorOfflineFormNumber,
+      senior_agent_offline_form_number: seniorOfflineFormNumber,
+      seniorName,
+      senior_name: seniorName,
+      seniorWorker: seniorName,
+      senior_worker: seniorName,
+      parentAgentId,
+      parent_agent_id: parentAgentId,
+    };
+  });
 }
 
 async function nextLadoBahinFormNumber(tx: PrismaTransactionClient): Promise<string> {
@@ -210,16 +409,18 @@ export class LadoBahinService {
     const nomineePhotoUrl = saveImagePayload(rawNomineePhoto);
 
     // Resolve owner agent ID
+    const explicitAgentId =
+      data.selectedAgentId ?? data.addedById ?? (data as any).addedby_id ?? data.agentId;
     const ownerId =
-      actor.role === "ADMIN" && data.selectedAgentId
-        ? data.selectedAgentId
+      actor.role === "ADMIN" && explicitAgentId && isValidUuid(String(explicitAgentId))
+        ? String(explicitAgentId)
         : addedById;
 
-    const rawPin = (data.epinCode || data.pinNumber || "").trim();
+    const rawPin = (data.epinCode || data.pinNumber || (data as any).epin || "").trim();
 
     const selectedAgentId =
-      actor.role === "ADMIN" && data.selectedAgentId
-        ? data.selectedAgentId
+      actor.role === "ADMIN" && explicitAgentId && isValidUuid(String(explicitAgentId))
+        ? String(explicitAgentId)
         : (actor.role === "AGENT" ? addedById : undefined);
 
     // Validate E-PIN if supplied
@@ -298,6 +499,25 @@ export class LadoBahinService {
           epinCode: rawPin || null,
           addedById: ownerId,
         },
+        include: {
+          addedBy: {
+            select: {
+              id: true,
+              name: true,
+              mobile: true,
+              role: true,
+              agentProfile: {
+                select: {
+                  id: true,
+                  employeeId: true,
+                  offlineFormNumber: true,
+                  workArea: true,
+                  designation: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       // If initial payment is made, record installment with designated account type
@@ -347,7 +567,8 @@ export class LadoBahinService {
         })();
       }
 
-      return registration;
+      const enrichedRegistration = await enrichLadoBahinRecord(registration);
+      return enrichedRegistration;
     }, PRISMA_TX_OPTIONS);
   }
 
@@ -427,6 +648,15 @@ export class LadoBahinService {
               name: true,
               mobile: true,
               role: true,
+              agentProfile: {
+                select: {
+                  id: true,
+                  employeeId: true,
+                  offlineFormNumber: true,
+                  workArea: true,
+                  designation: true,
+                },
+              },
             },
           },
           installments: {
@@ -437,7 +667,8 @@ export class LadoBahinService {
       }),
     ]);
 
-    const enrichedRecords = records.map((rec) => {
+    const formattedRecords = await enrichLadoBahinList(records);
+    const enrichedRecords = formattedRecords.map((rec: any) => {
       const summary = computeLadoBahinFinancialSummary(rec.installments);
       return {
         ...rec,
@@ -478,6 +709,15 @@ export class LadoBahinService {
             name: true,
             mobile: true,
             role: true,
+            agentProfile: {
+              select: {
+                id: true,
+                employeeId: true,
+                offlineFormNumber: true,
+                workArea: true,
+                designation: true,
+              },
+            },
           },
         },
         installments: {
@@ -505,11 +745,12 @@ export class LadoBahinService {
     }
 
     const financialSummary = computeLadoBahinFinancialSummary(record.installments);
+    const enrichedRecord = await enrichLadoBahinRecord(record);
 
     return {
       success: true,
       data: {
-        ...record,
+        ...enrichedRecord,
         financialSummary,
       },
     };
@@ -631,10 +872,38 @@ export class LadoBahinService {
     if (data.gender !== undefined) updateData.gender = normalizeGender(data.gender);
     if (data.category !== undefined) updateData.category = normalizeCategory(data.category);
 
+    const addedByCandidate =
+      data.selectedAgentId ?? data.addedById ?? data.agentId ?? (data as any).addedby_id;
+
+    if (
+      actor.role === "ADMIN" &&
+      addedByCandidate &&
+      isValidUuid(String(addedByCandidate))
+    ) {
+      updateData.addedBy = { connect: { id: String(addedByCandidate) } };
+    }
+
     const updated = await prisma.ladoBahinRegistration.update({
       where: { id },
       data: updateData,
       include: {
+        addedBy: {
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            role: true,
+            agentProfile: {
+              select: {
+                id: true,
+                employeeId: true,
+                offlineFormNumber: true,
+                workArea: true,
+                designation: true,
+              },
+            },
+          },
+        },
         installments: {
           where: { deletedAt: null },
           orderBy: { date: "asc" },
@@ -642,13 +911,14 @@ export class LadoBahinService {
       },
     });
 
+    const enriched = await enrichLadoBahinRecord(updated);
     const financialSummary = computeLadoBahinFinancialSummary(updated.installments);
 
     return {
       success: true,
       message: "Lado Bahin registration updated successfully",
       data: {
-        ...updated,
+        ...enriched,
         financialSummary,
       },
     };

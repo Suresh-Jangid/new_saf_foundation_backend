@@ -56,9 +56,14 @@ export const createLadoBahinSchema = z.object({
     schemeType: z.string().optional().default("LADO_BAHIN"),
     pool: z.string().optional().default("FEMALE_POOL"),
     membershipFee: z.number().optional().default(5100),
+    totalAmount: z.preprocess((val) => (val !== undefined && val !== null && val !== "" ? Number(val) : undefined), z.number().nonnegative()).optional(),
     epinCode: z.string().optional().nullable(),
     pinNumber: z.string().optional().nullable(),
+    epin: z.string().optional().nullable(),
     selectedAgentId: z.string().optional().nullable(),
+    addedById: z.string().optional().nullable(),
+    agentId: z.string().optional().nullable(),
+    addedby_id: z.string().optional().nullable(),
     initialAccountType: z
       .enum(["LADO_BAHIN_300", "LADO_BAHIN_1000"])
       .optional()
@@ -121,6 +126,16 @@ export const updateLadoBahinSchema = z.object({
     affidavitUrl: z.string().optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]).optional(),
     category: z.enum(["A", "B", "C", "D", "E", "F"]).optional(),
+    selectedAgentId: z.string().optional().nullable(),
+    addedById: z.string().optional().nullable(),
+    agentId: z.string().optional().nullable(),
+    addedby_id: z.string().optional().nullable(),
+    epinCode: z.string().optional().nullable(),
+    epin: z.string().optional().nullable(),
+    pinNumber: z.string().optional().nullable(),
+    membershipFee: z.number().optional().nullable(),
+    totalAmount: z.preprocess((val) => (val !== undefined && val !== null && val !== "" ? Number(val) : undefined), z.number().nonnegative()).optional(),
+    pendingAmount: z.preprocess((val) => (val !== undefined && val !== null && val !== "" ? Number(val) : undefined), z.number().nonnegative()).optional(),
   }),
 });
 
