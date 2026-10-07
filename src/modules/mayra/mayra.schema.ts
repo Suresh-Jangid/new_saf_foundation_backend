@@ -39,7 +39,18 @@ export const createMayraRegistrationSchema = z.object({
     tehsil: z.string().min(2, "Tehsil is required"),
     district: z.string().min(2, "District is required"),
     pinCode: z.string().length(6, "PIN Code must be 6 digits"),
-    nomineeRelation: z.string().min(2, "Nominee relation is required"),
+    nomineeRelation: z
+      .string()
+      .min(2, "Nominee relation is required")
+      .max(50, "Nominee relation must be 50 characters or less")
+      .optional()
+      .nullable(),
+    nominee_relation: z
+      .string()
+      .min(2, "Nominee relation is required")
+      .max(50, "Nominee relation must be 50 characters or less")
+      .optional()
+      .nullable(),
     workerName: z.string().min(2, "Worker name is required"),
     workerMobile: mobilePhoneSchema.optional().nullable(),
     nomineeMobile: mobilePhoneSchema.optional().nullable(),
@@ -90,7 +101,16 @@ export const createMayraRegistrationSchema = z.object({
     paymentAmount: z.preprocess((val) => val ? Number(val) : 0, z.number().nonnegative()).optional(),
     paymentMode: z.enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"]).optional(),
     selectedAgentId: z.string().uuid("Agent selection is required"),
-  }),
+  }).refine(
+    (data) => {
+      const rel = data.nomineeRelation ?? data.nominee_relation;
+      return typeof rel === "string" && rel.trim().length >= 2;
+    },
+    {
+      message: "Nominee relation is required",
+      path: ["nomineeRelation"],
+    }
+  ),
 });
 
 // Mayra Congratulations schema

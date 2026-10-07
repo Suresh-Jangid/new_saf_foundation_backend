@@ -199,7 +199,8 @@ export class MayraService {
           tehsil: data.tehsil || "",
           district: data.district || "",
           pinCode: data.pinCode || "",
-          nomineeRelation: data.nomineeRelation || "",
+          nomineeRelation:
+            String(data.nomineeRelation ?? data.nominee_relation ?? "").trim(),
           workerName: data.workerName || "",
           workerMobile: data.workerMobile || null,
           passportPhotoUrl: data.passportPhoto || data.passportPhotoUrl || null,
@@ -627,7 +628,12 @@ export class MayraService {
         nomineeGotra: data.nomineeGotra !== undefined ? data.nomineeGotra : reg.nomineeGotra,
         nomineeAddress: data.nomineeAddress !== undefined ? data.nomineeAddress : reg.nomineeAddress,
         nomineeAadhar,
-        nomineeRelation: data.nomineeRelation !== undefined ? data.nomineeRelation : reg.nomineeRelation,
+        nomineeRelation:
+          data.nomineeRelation !== undefined
+            ? (data.nomineeRelation !== null ? String(data.nomineeRelation).trim() : "")
+            : data.nominee_relation !== undefined
+              ? (data.nominee_relation !== null ? String(data.nominee_relation).trim() : "")
+              : reg.nomineeRelation,
         nomineeMobile,
         mayraInstallment,
         workerName: data.workerName !== undefined ? data.workerName : reg.workerName,
