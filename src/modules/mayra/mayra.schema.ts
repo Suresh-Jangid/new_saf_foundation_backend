@@ -45,10 +45,47 @@ export const createMayraRegistrationSchema = z.object({
     nomineeMobile: mobilePhoneSchema.optional().nullable(),
     nominee_mobile: mobilePhoneSchema.optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]),
-    
+
+    mayraInstallment: z
+      .preprocess(
+        (val) => (val != null && val !== "" ? Number(val) : undefined),
+        z
+          .number()
+          .refine(
+            (v) => v === 300 || v === 1000,
+            "Mayra installment must be 300 or 1000"
+          )
+          .optional()
+          .nullable()
+      ),
+    mayra_installment: z
+      .preprocess(
+        (val) => (val != null && val !== "" ? Number(val) : undefined),
+        z
+          .number()
+          .refine(
+            (v) => v === 300 || v === 1000,
+            "Mayra installment must be 300 or 1000"
+          )
+          .optional()
+          .nullable()
+      ),
+    installmentAmount: z
+      .preprocess(
+        (val) => (val != null && val !== "" ? Number(val) : undefined),
+        z
+          .number()
+          .refine(
+            (v) => v === 300 || v === 1000,
+            "Mayra installment must be 300 or 1000"
+          )
+          .optional()
+          .nullable()
+      ),
+
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
     offline_form_number: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),
-    
+
     // Initial payment details
     paymentAmount: z.preprocess((val) => val ? Number(val) : 0, z.number().nonnegative()).optional(),
     paymentMode: z.enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"]).optional(),

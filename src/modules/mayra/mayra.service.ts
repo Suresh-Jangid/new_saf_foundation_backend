@@ -133,6 +133,25 @@ export class MayraService {
         throw new BadRequestError("No active age slab found for the provided Date of Birth");
       }
 
+      const rawExplicit =
+        data.mayraInstallment ??
+        data.mayra_installment ??
+        data.installmentAmount;
+
+      const numExplicit =
+        rawExplicit != null && rawExplicit !== ""
+          ? Number(rawExplicit)
+          : null;
+
+      let resolvedInstallment: number;
+      if (numExplicit === 300) {
+        resolvedInstallment = 300;
+      } else if (numExplicit === 1000) {
+        resolvedInstallment = 1000;
+      } else {
+        throw new BadRequestError("Mayra installment must be 300 or 1000");
+      }
+
       const aadharNumber = String(data.aadharNumber || "").replace(/\D/g, "");
       await assertAadharAvailable(tx, aadharNumber, undefined, "mayraRegistration");
 
@@ -151,7 +170,7 @@ export class MayraService {
           resolvedMinAge: matchedSlab.minAge,
           resolvedMaxAge: matchedSlab.maxAge,
           joiningFee: matchedSlab.joiningFee,
-          mayraInstallment: matchedSlab.installment,
+          mayraInstallment: resolvedInstallment,
           gotra: data.gotra,
           address: data.address,
           aadharNumber,
@@ -544,6 +563,25 @@ export class MayraService {
         ? (nomineeMobileRaw ? String(nomineeMobileRaw).trim() : null)
         : reg.nomineeMobile;
 
+    const rawUpdateInstallment =
+      data.mayraInstallment !== undefined
+        ? data.mayraInstallment
+        : data.mayra_installment !== undefined
+        ? data.mayra_installment
+        : data.installmentAmount !== undefined
+        ? data.installmentAmount
+        : undefined;
+
+    let mayraInstallment = reg.mayraInstallment;
+    if (rawUpdateInstallment !== undefined && rawUpdateInstallment !== null && rawUpdateInstallment !== "") {
+      const numUpdateInstallment = Number(rawUpdateInstallment);
+      if (numUpdateInstallment === 300 || numUpdateInstallment === 1000) {
+        mayraInstallment = numUpdateInstallment as any;
+      } else {
+        throw new BadRequestError("Mayra installment must be 300 or 1000");
+      }
+    }
+
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
@@ -591,6 +629,7 @@ export class MayraService {
         nomineeAadhar,
         nomineeRelation: data.nomineeRelation !== undefined ? data.nomineeRelation : reg.nomineeRelation,
         nomineeMobile,
+        mayraInstallment,
         workerName: data.workerName !== undefined ? data.workerName : reg.workerName,
         workerMobile: data.workerMobile !== undefined ? data.workerMobile : reg.workerMobile,
         gender: data.gender !== undefined ? data.gender : reg.gender,
