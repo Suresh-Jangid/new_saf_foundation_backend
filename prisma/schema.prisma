@@ -318,6 +318,7 @@ model MayraRegistration {
   nomineeGotra       String?               @map("nominee_gotra") @db.VarChar(50)
   nomineeAddress     String?               @map("nominee_address")
   nomineeAadhar      String?               @map("nominee_aadhar") @db.VarChar(12)
+  nomineeMobile      String?               @map("nominee_mobile") @db.VarChar(15)
   tehsil             String                @db.VarChar(100)
   district           String                @db.VarChar(100)
   pinCode            String                @map("pin_code") @db.VarChar(10)

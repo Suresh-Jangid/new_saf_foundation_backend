@@ -171,6 +171,7 @@ export class MayraService {
             data.nomineeAadharNumber ||
             data.nomineeAadhaarNumber ||
             null,
+          nomineeMobile: data.nomineeMobile || data.nominee_mobile || null,
           // These columns are NOT NULL in the DB but are optional / conditionally
           // sent by the form (e.g. workerName is only sent when an agent is picked).
           // Default them to "" so a submit without them still succeeds instead of
@@ -532,6 +533,17 @@ export class MayraService {
         ? (nomineeAadharRaw ? String(nomineeAadharRaw).replace(/\D/g, "") : null)
         : reg.nomineeAadhar;
 
+    const nomineeMobileRaw =
+      data.nomineeMobile !== undefined
+        ? data.nomineeMobile
+        : data.nominee_mobile !== undefined
+        ? data.nominee_mobile
+        : undefined;
+    const nomineeMobile =
+      nomineeMobileRaw !== undefined
+        ? (nomineeMobileRaw ? String(nomineeMobileRaw).trim() : null)
+        : reg.nomineeMobile;
+
     const addedByCandidate =
       data.selectedAgentId ?? data.addedby_id ?? data.addedById;
 
@@ -578,6 +590,7 @@ export class MayraService {
         nomineeAddress: data.nomineeAddress !== undefined ? data.nomineeAddress : reg.nomineeAddress,
         nomineeAadhar,
         nomineeRelation: data.nomineeRelation !== undefined ? data.nomineeRelation : reg.nomineeRelation,
+        nomineeMobile,
         workerName: data.workerName !== undefined ? data.workerName : reg.workerName,
         workerMobile: data.workerMobile !== undefined ? data.workerMobile : reg.workerMobile,
         gender: data.gender !== undefined ? data.gender : reg.gender,

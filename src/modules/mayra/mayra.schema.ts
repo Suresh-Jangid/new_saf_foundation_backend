@@ -42,6 +42,8 @@ export const createMayraRegistrationSchema = z.object({
     nomineeRelation: z.string().min(2, "Nominee relation is required"),
     workerName: z.string().min(2, "Worker name is required"),
     workerMobile: mobilePhoneSchema.optional().nullable(),
+    nomineeMobile: mobilePhoneSchema.optional().nullable(),
+    nominee_mobile: mobilePhoneSchema.optional().nullable(),
     gender: z.enum(["Male", "Female", "Other"]),
     
     offlineFormNumber: z.string().trim().max(50, "Offline Form Number must not exceed 50 characters").optional().nullable(),

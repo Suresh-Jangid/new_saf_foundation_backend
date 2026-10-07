@@ -404,6 +404,8 @@ export function mapMayraApplicationRecord(reg: Record<string, any>) {
     nominee_father_name: reg.nomineeFatherName ?? reg.nominee_father_name ?? reg.nomineeFathername,
     nominee_relation: reg.nomineeRelation ?? reg.nominee_relation,
     nomineeRelation: reg.nomineeRelation ?? reg.nominee_relation,
+    nomineeMobile: reg.nomineeMobile ?? reg.nominee_mobile ?? null,
+    nominee_mobile: reg.nomineeMobile ?? reg.nominee_mobile ?? null,
     nomineeAadhar:
       reg.nomineeAadhar ??
       reg.nominee_aadhar ??
