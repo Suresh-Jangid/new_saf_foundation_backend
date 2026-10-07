@@ -50,7 +50,7 @@ export const createDhundhotsavSchema = z.object({
       .optional()
       .nullable(),
     paymentMode: z
-      .enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"])
+      .enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER", "CHEQUE", "DD"])
       .optional()
       .default("CASH"),
     offlineFormNumber: z
@@ -141,7 +141,7 @@ export const addDhundhotsavInstallmentSchema = z.object({
     note: z.string().optional().nullable(),
     rashidNumber: z.string().optional().nullable(),
     paymentMode: z
-      .enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER"])
+      .enum(["CASH", "ONLINE", "RAZORPAY", "BANK_TRANSFER", "CHEQUE", "DD"])
       .optional()
       .default("CASH"),
   }),
