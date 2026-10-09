@@ -48,8 +48,8 @@ export const INITIAL_MODULE_REGISTRY: ModuleRegistryItem[] = [
 ];
 
 export const INITIAL_AGE_SLABS: AgeSlabItem[] = [
-  { slabCode: "SLAB_A", slabName: "Slab A (1–5 Years)", minAge: 1, maxAge: 5, joiningFee: 1500, installment: 100, schemeType: "GENERAL", status: "Active", displayOrder: 1 },
-  { slabCode: "SLAB_B", slabName: "Slab B (6–10 Years)", minAge: 6, maxAge: 10, joiningFee: 3100, installment: 200, schemeType: "GENERAL", status: "Active", displayOrder: 2 },
+  { slabCode: "SLAB_A", slabName: "Slab A (1–5 Years)", minAge: 1, maxAge: 5, joiningFee: 1500, installment: 300, schemeType: "GENERAL", status: "Active", displayOrder: 1 },
+  { slabCode: "SLAB_B", slabName: "Slab B (6–10 Years)", minAge: 6, maxAge: 10, joiningFee: 3100, installment: 300, schemeType: "GENERAL", status: "Active", displayOrder: 2 },
   { slabCode: "SLAB_C", slabName: "Slab C (11–15 Years)", minAge: 11, maxAge: 15, joiningFee: 5100, installment: 300, schemeType: "GENERAL", status: "Active", displayOrder: 3 },
   { slabCode: "SLAB_D", slabName: "Slab D (16–18 Years)", minAge: 16, maxAge: 18, joiningFee: 8100, installment: 300, schemeType: "GENERAL", status: "Active", displayOrder: 4 },
   { slabCode: "SLAB_E", slabName: "Slab E (19–21 Years)", minAge: 19, maxAge: 21, joiningFee: 10000, installment: 300, schemeType: "GENERAL", status: "Active", displayOrder: 5 },

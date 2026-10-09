@@ -1,3 +1,5 @@
+import { NotFoundError, BadRequestError } from "../../utils/errors";
+import { resolveGeneralMarriageGroup, getExpectedInstallmentAmount, validateContributionGroupMatch } from "../../utils/contribution-group";
 import { Response, NextFunction } from "express";
 import { SchemesService } from "./schemes.service";
 import { AuthenticatedRequest } from "../../middlewares/auth";
@@ -317,19 +319,14 @@ export class SchemesController {
         { category: "C", total: countsMap.C }
       ];
 
-      // Dynamic installment calculation based on date and category
+      // Dynamic installment calculation based on date and authoritative installment group
       const memberApp = await prisma.generalApplication.findFirst({
         where: { id: linkedApplicationId || "", deletedAt: null },
-        select: { category: true, applicationDate: true }
+        select: { category: true, applicationDate: true, installmentAmount: true }
       });
 
-      let rate = 300;
-      if (memberApp) {
-        const cat = String(memberApp.category || "").toUpperCase();
-        if (cat === "A") rate = 100;
-        else if (cat === "B") rate = 200;
-        else if (cat === "C") rate = 300;
-      }
+      const appGroup = memberApp ? resolveGeneralMarriageGroup(memberApp.installmentAmount) : null;
+      const rate = appGroup ? getExpectedInstallmentAmount(appGroup) : 300;
 
       let otherMarriagesCount = 0;
       if (memberApp?.applicationDate) {
@@ -397,8 +394,22 @@ export class SchemesController {
       }
 
       const payer = applications[0];
+      const payerGroup = resolveGeneralMarriageGroup(payer.installmentAmount);
+      if (!payerGroup) {
+        res.status(400).json({
+          success: false,
+          message: `Member ${payer.formNumber} has an ambiguous or unassigned installment group (${payer.installmentAmount || 'none'}). Bulk marriage EMI requires an authoritative ₹300 or ₹1000 group.`
+        });
+        return;
+      }
+      const expectedInstallment = getExpectedInstallmentAmount(payerGroup);
+
       const congratsRecords = await prisma.marriageCongratulations.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          gender: payer.gender,
+          installmentAmount: expectedInstallment,
+        },
         orderBy: { date: "desc" }
       });
 
@@ -412,7 +423,7 @@ export class SchemesController {
           }
         });
 
-        const emiAmount = payer.category === "A" ? Number(congrats.rate100) : payer.category === "B" ? Number(congrats.rate200) : Number(congrats.rate300);
+        const emiAmount = expectedInstallment;
 
         mappedRecords.push({
           id: congrats.id,
@@ -431,6 +442,8 @@ export class SchemesController {
 
       res.status(200).json({
         success: true,
+        group: payerGroup,
+        installmentAmount: expectedInstallment,
         payer: {
           id: payer.id,
           formNumber: payer.formNumber,
@@ -441,7 +454,7 @@ export class SchemesController {
           category: payer.category,
           gender: payer.gender,
           mobile: payer.mobile,
-          emiAmount: payer.category === "A" ? 100 : payer.category === "B" ? 200 : 300
+          emiAmount: expectedInstallment
         },
         records: mappedRecords
       });
@@ -456,76 +469,105 @@ export class SchemesController {
       const { application_id, data: items } = req.body;
       const addedById = req.user?.userId || "";
 
-      const payerApp = await prisma.generalApplication.findFirst({
-        where: {
-          OR: [
-            { id: String(application_id) },
-            { formNumber: String(application_id) }
-          ],
-          deletedAt: null
-        }
-      });
-      if (!payerApp) {
-        res.status(404).json({ success: false, message: "Payer application not found" });
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ success: false, message: "No marriage records selected for payment" });
         return;
       }
-      if (!payerApp.isActive) {
-        res.status(400).json({
-          success: false,
-          message: "This member is inactive (marriage already recorded) and cannot receive further marriage EMI payments"
+
+      const result = await prisma.$transaction(async (tx) => {
+        const payerApp = await tx.generalApplication.findFirst({
+          where: {
+            OR: [
+              { id: String(application_id) },
+              { formNumber: String(application_id) }
+            ],
+            deletedAt: null
+          }
         });
-        return;
-      }
+        if (!payerApp) {
+          throw new NotFoundError("Payer application not found");
+        }
+        if (!payerApp.isActive) {
+          throw new BadRequestError("This member is inactive and cannot contribute marriage EMI payments");
+        }
 
-      let updated = 0;
-      const details = [];
+        const payerGroup = resolveGeneralMarriageGroup(payerApp.installmentAmount);
+        if (!payerGroup) {
+          throw new BadRequestError(
+            `Member ${payerApp.formNumber} has an ambiguous or unassigned installment group (${payerApp.installmentAmount || 'none'}). Bulk payment rejected.`
+          );
+        }
+        const expectedEmiAmount = getExpectedInstallmentAmount(payerGroup);
 
-      for (const item of items) {
-        try {
-          const congrats = await prisma.marriageCongratulations.findUnique({
+        let updated = 0;
+        const details = [];
+
+        for (const item of items) {
+          const congrats = await tx.marriageCongratulations.findUnique({
             where: { id: item.id }
           });
           if (!congrats) {
-            details.push({ marriageNumber: "", status: "failed" });
-            continue;
+            throw new NotFoundError(`Marriage record with ID ${item.id} not found`);
           }
 
-          const emiAmount = payerApp.category === "A" ? congrats.rate100 : payerApp.category === "B" ? congrats.rate200 : congrats.rate300;
+          const congratsGroup = resolveGeneralMarriageGroup(congrats.installmentAmount);
+          validateContributionGroupMatch({
+            sourceModule: "general_marriage",
+            recipientModule: "general_marriage",
+            sourceGroup: payerGroup,
+            recipientGroup: congratsGroup,
+            sourceLabel: `Payer member (${payerApp.formNumber})`,
+            recipientLabel: `Recipient marriage (${congrats.marriageNumber})`,
+          });
 
-          const marriagePayment = await prisma.marriageCongratulationsPayment.create({
-            data: {
+          if (payerApp.gender !== congrats.gender) {
+            throw new BadRequestError(`Gender mismatch: Marriage ${congrats.marriageNumber} gender (${congrats.gender}) does not match payer gender (${payerApp.gender})`);
+          }
+
+          const existingPayment = await tx.marriageCongratulationsPayment.findFirst({
+            where: {
               marriageCongratulationsId: congrats.id,
               applicationId: payerApp.id,
-              category: payerApp.category,
-              amount: emiAmount,
-              addedById: item.addedby_id || addedById || ""
+              deletedAt: null,
             }
           });
 
-          await recordLegacyPaymentEntry(prisma, {
-            legacyId: marriagePayment.id,
-            date: marriagePayment.createdAt,
-            amount: emiAmount,
-            name: formatEmiContributionName(
-              [payerApp.formNumber, payerApp.applicantName, payerApp.address],
-              { name: congrats.applicantName, code: congrats.codeNumber, scheme: "marriage" }
-            ),
-            source: "marriage_congratulations_emi",
-            type: "In",
-          });
+          if (!existingPayment) {
+            const marriagePayment = await tx.marriageCongratulationsPayment.create({
+              data: {
+                marriageCongratulationsId: congrats.id,
+                applicationId: payerApp.id,
+                category: payerApp.category,
+                amount: expectedEmiAmount,
+                addedById: item.addedby_id || addedById || ""
+              }
+            });
+
+            await recordLegacyPaymentEntry(tx, {
+              legacyId: marriagePayment.id,
+              date: marriagePayment.createdAt,
+              amount: expectedEmiAmount,
+              name: formatEmiContributionName(
+                [payerApp.formNumber, payerApp.applicantName, payerApp.address],
+                { name: congrats.applicantName, code: congrats.codeNumber, scheme: "marriage" }
+              ),
+              source: "marriage_congratulations_emi",
+              type: "In",
+            });
+          }
 
           updated++;
           details.push({ marriageNumber: congrats.marriageNumber, status: "updated" });
-        } catch (err) {
-          details.push({ marriageNumber: "", status: "failed" });
         }
-      }
+
+        return { updated, details };
+      });
 
       res.status(200).json({
         success: true,
-        updated,
-        failed: items.length - updated,
-        details
+        marriages_updated: result.updated,
+        marriages_failed: items.length - result.updated,
+        details: result.details
       });
       return;
     } catch (error) {

@@ -1,3 +1,4 @@
+import { resolveGeneralMarriageGroup, resolveMayraGroup, validateContributionGroupMatch, getExpectedInstallmentAmount } from "../../utils/contribution-group";
 import { getModuleWithAliases, isValidModule, isAgentManageableModule, isValidAction } from '../../config/permissions';
 import "regenerator-runtime/runtime";
 import { Router, Request, Response } from "express";
@@ -79,13 +80,7 @@ const SURAKSHA_BIMA_EMI_AMOUNT = 200;
 // member counts (see marriage-congratulations add form, where these fields
 // are populated from category counts, not from the 100/200/300 rate table).
 // They must never be read as the per-installment EMI amount.
-const MARRIAGE_CATEGORY_EMI_AMOUNTS: Record<string, number> = { A: 100, B: 200, C: 300 };
 
-// Same footgun as MARRIAGE_CATEGORY_EMI_AMOUNTS above, for Mayra
-// Congratulations: MayraCongratulations.rate200/rate300 store category
-// member counts, not the per-installment EMI amount. Mayra only pays out
-// for categories B and C (legacy behaviour — category A gets 0).
-const MAYRA_CATEGORY_EMI_AMOUNTS: Record<string, number> = { B: 200, C: 300 };
 
 // Setup multer disk storage for file uploads
 const uploadsDir = path.join(__dirname, "../../../uploads");
@@ -899,7 +894,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
               resolvedMinAge: matchedSlab.minAge,
               resolvedMaxAge: matchedSlab.maxAge,
               joiningFee: Number(matchedSlab.joiningFee),
-              mayraInstallment: Number(matchedSlab.installment)
+              mayraInstallment: Number(matchedSlab.installment) === 1000 ? 1000 : 300
             }
           });
         } catch (error: any) {
@@ -1608,19 +1603,14 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           { category: "C", total: countsMap.C }
         ];
 
-        // Dynamic installment calculation based on date and category
+        // Dynamic installment calculation based on date and authoritative installment group
         const memberApp = await prisma.generalApplication.findFirst({
           where: { id: linkedApplicationId || "", deletedAt: null },
-          select: { category: true, applicationDate: true }
+          select: { category: true, applicationDate: true, installmentAmount: true }
         });
 
-        let rate = 300;
-        if (memberApp) {
-          const cat = String(memberApp.category || "").toUpperCase();
-          if (cat === "A") rate = 100;
-          else if (cat === "B") rate = 200;
-          else if (cat === "C") rate = 300;
-        }
+        const appGroup = memberApp ? resolveGeneralMarriageGroup(memberApp.installmentAmount) : null;
+        const rate = appGroup ? getExpectedInstallmentAmount(appGroup) : (details?.installmentAmount ? (resolveGeneralMarriageGroup(details.installmentAmount) ? getExpectedInstallmentAmount(resolveGeneralMarriageGroup(details.installmentAmount)!) : 300) : 300);
 
         let otherMarriagesCount = 0;
         if (memberApp?.applicationDate) {
@@ -3122,99 +3112,129 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
         if (isValidId) {
           orConditions.push({ id: String(mayra_id) });
         }
-        const payerApp = await prisma.generalApplication.findFirst({
+        const payerApp = await prisma.mayraRegistration.findFirst({
           where: {
             OR: orConditions,
             deletedAt: null
           }
         });
         if (!payerApp) {
-          return res.status(200).json({ error: true, message: "Payer application not found" });
+          return res.status(200).json({ error: true, message: "Payer Mayra application not found" });
+        }
+        if (!payerApp.isActive) {
+          return res.status(200).json({ error: true, message: "This Mayra member is inactive and cannot contribute to Mayra EMI" });
         }
 
-        let updated = 0;
-        const details = [];
+        const payerGroup = resolveMayraGroup(payerApp.mayraInstallment);
+        if (!payerGroup) {
+          return res.status(200).json({ error: true, message: `Payer Mayra member has an ambiguous or unassigned installment group (${payerApp.mayraInstallment || 'none'}).` });
+        }
+        const expectedEmiAmount = getExpectedInstallmentAmount(payerGroup);
 
         const defaultAdmin = await prisma.user.findFirst({ select: { id: true } });
         const fallbackUserId = defaultAdmin?.id || "";
 
-        for (const item of items) {
-          try {
-            if (!isValidUuid(item.id)) {
-              details.push({ mayraNumber: "", status: "failed" });
-              continue;
-            }
-            const congrats = await prisma.mayraCongratulations.findFirst({
-              where: { id: item.id, deletedAt: null }
-            });
-            if (!congrats) {
-              details.push({ mayraNumber: "", status: "failed" });
-              continue;
-            }
+        try {
+          const result = await prisma.$transaction(async (tx) => {
+            let updated = 0;
+            const details = [];
 
-            const emiAmount = MAYRA_CATEGORY_EMI_AMOUNTS[payerApp.category] ?? 0;
-            const finalAddedById = isValidUuid(item.addedby_id) ? item.addedby_id : (isValidUuid(addedById) ? addedById : fallbackUserId);
-
-            const existingPayment = await prisma.mayraCongratulationsPayment.findFirst({
-              where: {
-                mayraCongratulationsId: congrats.id,
-                applicationId: payerApp.id,
-                deletedAt: null
+            for (const item of items) {
+              if (!isValidUuid(item.id)) {
+                details.push({ mayraNumber: "", status: "failed" });
+                continue;
               }
-            });
-
-            if (existingPayment) {
-              await prisma.mayraCongratulationsPayment.update({
-                where: { id: existingPayment.id },
-                data: {
-                  amount: emiAmount,
-                  category: payerApp.category,
-                  addedById: finalAddedById,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                }
+              const congrats = await tx.mayraCongratulations.findFirst({
+                where: { id: item.id, deletedAt: null },
+                include: { mayraRegistration: true },
               });
-            } else {
-              await prisma.mayraCongratulationsPayment.create({
-                data: {
+              if (!congrats) {
+                details.push({ mayraNumber: "", status: "failed" });
+                continue;
+              }
+
+              const congratsGroup = resolveMayraGroup(congrats.mayraRegistration?.mayraInstallment ?? congrats.installmentAmount);
+              validateContributionGroupMatch({
+                sourceModule: "mayra",
+                recipientModule: "mayra",
+                sourceGroup: payerGroup,
+                recipientGroup: congratsGroup,
+                sourceLabel: `Payer Mayra member (${payerApp.formNumber})`,
+                recipientLabel: `Recipient Mayra (${congrats.mayraNumber})`,
+              });
+
+              if (payerApp.gender !== congrats.gender) {
+                throw new Error(`Gender mismatch: Mayra ${congrats.mayraNumber} gender (${congrats.gender}) does not match payer gender (${payerApp.gender})`);
+              }
+
+              const finalAddedById = isValidUuid(item.addedby_id) ? item.addedby_id : (isValidUuid(addedById) ? addedById : fallbackUserId);
+
+              const existingPayment = await tx.mayraCongratulationsPayment.findFirst({
+                where: {
                   mayraCongratulationsId: congrats.id,
                   applicationId: payerApp.id,
-                  category: payerApp.category,
-                  amount: emiAmount,
-                  addedById: finalAddedById,
-                  createdAt: new Date()
+                  deletedAt: null
                 }
               });
+
+              if (existingPayment) {
+                await tx.mayraCongratulationsPayment.update({
+                  where: { id: existingPayment.id },
+                  data: {
+                    amount: expectedEmiAmount,
+                    category: payerApp.slabCode || "EMI",
+                    addedById: finalAddedById,
+                    updatedAt: new Date()
+                  }
+                });
+              } else {
+                await tx.mayraCongratulationsPayment.create({
+                  data: {
+                    mayraCongratulationsId: congrats.id,
+                    applicationId: payerApp.id,
+                    category: payerApp.slabCode || "EMI",
+                    amount: expectedEmiAmount,
+                    addedById: finalAddedById,
+                    createdAt: new Date()
+                  }
+                });
+              }
+
+              await recordLegacyPaymentEntry(tx, {
+                legacyId: congrats.id,
+                date: new Date(),
+                amount: expectedEmiAmount,
+                name: formatEmiContributionName(
+                  [payerApp.formNumber, payerApp.applicantName, payerApp.address],
+                  { name: congrats.applicantName, code: congrats.codeNumber, scheme: "Mayra congratulations" }
+                ),
+                source: "mayra_congratulations_emi",
+                type: "In",
+              });
+
+              updated++;
+              details.push({ mayraNumber: congrats.mayraNumber, status: "updated" });
             }
 
-            await recordLegacyPaymentEntry(prisma, {
-              legacyId: congrats.id,
-              date: new Date(),
-              amount: emiAmount,
-              name: formatEmiContributionName(
-                [payerApp.formNumber, payerApp.applicantName, payerApp.address],
-                { name: congrats.applicantName, code: congrats.codeNumber, scheme: "Mayra congratulations" }
-              ),
-              source: "mayra_congratulations_emi",
-              type: "In",
-            });
+            return { updated, details };
+          });
 
-            updated++;
-            details.push({ mayraNumber: congrats.mayraNumber, status: "updated" });
-          } catch (err) {
-            details.push({ mayraNumber: "", status: "failed" });
-          }
+          bulkDataCache.clear();
+
+          return res.json({
+            status: true,
+            error: false,
+            mayras_updated: result.updated,
+            mayras_failed: items.length - result.updated,
+            details: result.details
+          });
+        } catch (txErr: any) {
+          return res.status(200).json({
+            status: false,
+            error: true,
+            message: txErr.message || "Failed to update Mayra EMI status"
+          });
         }
-
-        bulkDataCache.clear();
-
-        return res.json({
-          status: true,
-          error: false,
-          mayras_updated: updated,
-          mayras_failed: items.length - updated,
-          details
-        });
       }
 
       case "getMayraPreviousMembers": {
@@ -3235,19 +3255,35 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
         if (isValidId) {
           orConditions.push({ id: String(userId) });
         }
-        const applications = await prisma.generalApplication.findMany({
+        const mayraRegistrations = await prisma.mayraRegistration.findMany({
           where: {
             OR: orConditions,
             deletedAt: null,
             isActive: true
           }
         });
-        if (applications.length === 0) {
-          return res.json({ success: false, status: false, message: "No member found" });
+        if (mayraRegistrations.length === 0) {
+          return res.json({ success: false, status: false, message: "No Mayra member found" });
         }
 
-        const payer = applications[0];
-        const congratsWhere: any = { deletedAt: null, gender: payer.gender };
+        const payer = mayraRegistrations[0];
+        const payerGroup = resolveMayraGroup(payer.mayraInstallment);
+        if (!payerGroup) {
+          return res.json({
+            success: false,
+            status: false,
+            message: `Mayra member ${payer.formNumber} has an ambiguous or unassigned installment group (${payer.mayraInstallment || 'none'}). Cannot process bulk Mayra EMI.`
+          });
+        }
+        const expectedInstallment = getExpectedInstallmentAmount(payerGroup);
+
+        const congratsWhere: any = {
+          deletedAt: null,
+          gender: payer.gender,
+          mayraRegistration: {
+            mayraInstallment: expectedInstallment
+          }
+        };
         if (payload.fromDate || payload.toDate) {
           congratsWhere.date = {};
           if (payload.fromDate) {
@@ -3265,10 +3301,11 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
 
         const congratsRecords = await prisma.mayraCongratulations.findMany({
           where: congratsWhere,
+          include: { mayraRegistration: true },
           orderBy: { date: "desc" }
         });
 
-        const emiAmount = MAYRA_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0;
+        const emiAmount = expectedInstallment;
 
         const mayraPayments = await prisma.mayraCongratulationsPayment.findMany({
           where: {
@@ -3291,17 +3328,16 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
             payment_status: payment ? 1 : 0,
             filter_payment_status: payment ? 1 : 0,
             filter_row_id: payment?.id || congrats.id,
-            pdf_created: (payment as any)?.rashidNumber ? 1 : 0,
-            rashidNumber: (payment as any)?.rashidNumber || "",
+            pdf_created: 0,
             tehsil: congrats.address
           };
         });
 
-        const payerEmiAmount = emiAmount;
-
         return res.json({
-          success: true,
           status: true,
+          success: true,
+          group: payerGroup,
+          installmentAmount: expectedInstallment,
           mayra_application: [{
             id: payer.id,
             formNumber: payer.formNumber,
@@ -3309,10 +3345,10 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
             fatherName: payer.fatherName,
             gotra: payer.gotra,
             address: payer.address,
-            category: payer.category,
+            category: payer.slabCode,
             gender: payer.gender,
             mobile: payer.mobile,
-            emiAmount: payerEmiAmount
+            emiAmount: expectedInstallment
           }],
           mayras: mappedMayras
         });
@@ -3331,7 +3367,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           return res.json({ success: false, status: false, message: "agentId is required" });
         }
 
-        const members = await prisma.generalApplication.findMany({
+        const members = await prisma.mayraRegistration.findMany({
           where: {
             addedById: String(agentId),
             deletedAt: null,
@@ -3408,7 +3444,8 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           const shouldInclude = includePaid ? (owed.length > 0) : (pendingCount > 0);
 
           if (shouldInclude) {
-            const emiAmount = MAYRA_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0;
+            const payerGroup = resolveMayraGroup(payer.mayraInstallment);
+            const emiAmount = payerGroup ? getExpectedInstallmentAmount(payerGroup) : 0;
             const eventsToShow = includePaid ? owed : pendingEvents;
             results.push({
               id: payer.id,
@@ -3419,7 +3456,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
               gotra: payer.gotra,
               address: payer.address,
               gender: payer.gender,
-              category: payer.category,
+              category: payer.slabCode || "EMI",
               totalOwed: owed.length,
               pendingCount,
               emiAmount,
@@ -3478,15 +3515,12 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           });
 
           for (const congrats of congratsRecords) {
-            const orConditions: any[] = [
-              { gotra: congrats.gotra, gender: congrats.gender, deletedAt: null }
-            ];
-            const payerApp = await prisma.generalApplication.findFirst({
-              where: { OR: orConditions }
+            const payerApp = await prisma.mayraRegistration.findFirst({
+              where: { gotra: congrats.gotra, gender: congrats.gender, deletedAt: null, isActive: true }
             });
-            
-            const emiAmount = payerApp ? (MAYRA_CATEGORY_EMI_AMOUNTS[payerApp.category] ?? 300) : 300;
-            const category = payerApp ? payerApp.category : "A";
+            const payerGroup = payerApp ? resolveMayraGroup(payerApp.mayraInstallment) : null;
+            const emiAmount = payerGroup ? getExpectedInstallmentAmount(payerGroup) : (congrats.installmentAmount ? Number(congrats.installmentAmount) : 300);
+            const category = payerApp ? (payerApp.slabCode || "EMI") : "EMI";
             const appId = payerApp ? payerApp.id : congrats.id;
 
             const newPayment = await prisma.mayraCongratulationsPayment.create({
@@ -3652,13 +3686,20 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
         }
 
         const payer = applications[0];
-        // A member only owes EMI on weddings that happened while they were an active
-        // contributor: from their own join date onward, until (if ever) their own
-        // marriage congratulations record retires them. Weddings that happened before
-        // they joined are not their obligation, regardless of gender match.
+        const payerGroup = resolveGeneralMarriageGroup(payer.installmentAmount);
+        if (!payerGroup) {
+          return res.json({
+            success: false,
+            status: false,
+            message: `Member ${payer.formNumber} has an ambiguous or unassigned installment group (${payer.installmentAmount || 'none'}). Cannot process bulk EMI.`
+          });
+        }
+        const expectedInstallment = getExpectedInstallmentAmount(payerGroup);
+
         const congratsWhere: any = {
           deletedAt: null,
           gender: payer.gender,
+          installmentAmount: expectedInstallment,
           date: { gte: payer.applicationDate }
         };
         if (payload.fromDate) {
@@ -3681,7 +3722,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           orderBy: [{ date: "desc" }, { createdAt: "desc" }]
         });
 
-        const emiAmount = MARRIAGE_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0;
+        const emiAmount = expectedInstallment;
 
         const payments = await prisma.marriageCongratulationsPayment.findMany({
           where: {
@@ -3712,11 +3753,11 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           };
         });
 
-        const payerEmiAmount = emiAmount;
-
         return res.json({
           success: true,
           status: true,
+          group: payerGroup,
+          installmentAmount: expectedInstallment,
           applications: [{
             id: payer.id,
             formNumber: payer.formNumber,
@@ -3727,7 +3768,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
             category: payer.category,
             gender: payer.gender,
             mobile: payer.mobile,
-            emiAmount: payerEmiAmount
+            emiAmount: expectedInstallment
           }],
           marriages: mappedMarriages
         });
@@ -3748,7 +3789,7 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           select: {
             id: true, formNumber: true, applicantName: true, fatherName: true,
             gotra: true, address: true, gender: true, category: true,
-            applicationDate: true, mobile: true
+            applicationDate: true, mobile: true, installmentAmount: true
           }
         });
 
@@ -3834,7 +3875,8 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           const shouldInclude = includePaid ? (owed.length > 0) : (pendingCount > 0);
           if (!shouldInclude) continue;
 
-          const emiAmount = MARRIAGE_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0;
+          const payerGroup = resolveGeneralMarriageGroup(payer.installmentAmount);
+          const emiAmount = payerGroup ? getExpectedInstallmentAmount(payerGroup) : 0;
           results.push({
             id: payer.id,
             formNumber: payer.formNumber,
@@ -4035,7 +4077,8 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           const pendingCount = pendingEvents.length;
 
           if (pendingCount > 0) {
-            const emiAmount = isSuraksha ? 200 : (MARRIAGE_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0);
+            const payerGroup = resolveGeneralMarriageGroup((payer as any).installmentAmount);
+            const emiAmount = isSuraksha ? 200 : (payerGroup ? getExpectedInstallmentAmount(payerGroup) : 0);
             results.push({
               id: payer.id,
               formNumber: payer.formNumber,
@@ -4444,104 +4487,133 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
         if (!payerApp) {
           return res.status(200).json({ error: true, message: "Payer application not found" });
         }
+        if (!payerApp.isActive) {
+          return res.status(200).json({ error: true, message: "This member is inactive and cannot contribute to Marriage EMI" });
+        }
 
-        let updated = 0;
-        const details = [];
+        const payerGroup = resolveGeneralMarriageGroup(payerApp.installmentAmount);
+        if (!payerGroup) {
+          return res.status(200).json({ error: true, message: `Payer member ${payerApp.formNumber} has an ambiguous or unassigned installment group (${payerApp.installmentAmount || 'none'}).` });
+        }
+        const expectedEmiAmount = getExpectedInstallmentAmount(payerGroup);
 
         const defaultAdmin = await prisma.user.findFirst({ select: { id: true } });
         const fallbackUserId = defaultAdmin?.id || "";
 
-        for (const item of items) {
-          try {
-            if (!isValidUuid(item.id)) {
-              details.push({ marriageNumber: "", status: "failed" });
-              continue;
-            }
-            const congrats = await prisma.marriageCongratulations.findFirst({
-              where: { id: item.id, deletedAt: null }
-            });
-            if (!congrats) {
-              details.push({ marriageNumber: "", status: "failed" });
-              continue;
-            }
+        try {
+          const result = await prisma.$transaction(async (tx) => {
+            let updated = 0;
+            const details = [];
 
-            const emiAmount = MARRIAGE_CATEGORY_EMI_AMOUNTS[payerApp.category] ?? 0;
-            const finalAddedById = isValidUuid(item.addedby_id) ? item.addedby_id : (isValidUuid(addedById) ? addedById : fallbackUserId);
-            const paymentModeInput = normalizePaymentMode(payload.payment_mode || "CASH");
-
-            const existingPayment = await prisma.marriageCongratulationsPayment.findFirst({
-              where: {
-                marriageCongratulationsId: congrats.id,
-                applicationId: payerApp.id,
-                deletedAt: null
+            for (const item of items) {
+              if (!isValidUuid(item.id)) {
+                details.push({ marriageNumber: "", status: "failed" });
+                continue;
               }
-            });
-
-            if (existingPayment) {
-              await prisma.marriageCongratulationsPayment.update({
-                where: { id: existingPayment.id },
-                data: {
-                  amount: emiAmount,
-                  category: payerApp.category,
-                  addedById: finalAddedById,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                }
+              const congrats = await tx.marriageCongratulations.findFirst({
+                where: { id: item.id, deletedAt: null }
               });
-            } else {
-              await prisma.marriageCongratulationsPayment.create({
-                data: {
+              if (!congrats) {
+                details.push({ marriageNumber: "", status: "failed" });
+                continue;
+              }
+
+              const congratsGroup = resolveGeneralMarriageGroup(congrats.installmentAmount);
+              validateContributionGroupMatch({
+                sourceModule: "general_marriage",
+                recipientModule: "general_marriage",
+                sourceGroup: payerGroup,
+                recipientGroup: congratsGroup,
+                sourceLabel: `Payer member (${payerApp.formNumber})`,
+                recipientLabel: `Recipient marriage (${congrats.marriageNumber})`,
+              });
+
+              if (payerApp.gender !== congrats.gender) {
+                throw new Error(`Gender mismatch: Marriage ${congrats.marriageNumber} gender (${congrats.gender}) does not match payer gender (${payerApp.gender})`);
+              }
+
+              const finalAddedById = isValidUuid(item.addedby_id) ? item.addedby_id : (isValidUuid(addedById) ? addedById : fallbackUserId);
+              const paymentModeInput = normalizePaymentMode(payload.payment_mode || "CASH");
+
+              const existingPayment = await tx.marriageCongratulationsPayment.findFirst({
+                where: {
                   marriageCongratulationsId: congrats.id,
                   applicationId: payerApp.id,
-                  category: payerApp.category,
-                  amount: emiAmount,
-                  addedById: finalAddedById,
-                  createdAt: new Date()
+                  deletedAt: null
                 }
               });
+
+              if (existingPayment) {
+                await tx.marriageCongratulationsPayment.update({
+                  where: { id: existingPayment.id },
+                  data: {
+                    amount: expectedEmiAmount,
+                    category: payerApp.category,
+                    addedById: finalAddedById,
+                    updatedAt: new Date()
+                  }
+                });
+              } else {
+                await tx.marriageCongratulationsPayment.create({
+                  data: {
+                    marriageCongratulationsId: congrats.id,
+                    applicationId: payerApp.id,
+                    category: payerApp.category,
+                    amount: expectedEmiAmount,
+                    addedById: finalAddedById,
+                    createdAt: new Date()
+                  }
+                });
+              }
+
+              // Create matching GeneralApplicationInstallment row
+              await tx.generalApplicationInstallment.create({
+                data: {
+                  applicationId: payerApp.id,
+                  amount: expectedEmiAmount,
+                  date: new Date(),
+                  paymentMode: paymentModeInput,
+                  note: `MARRIAGE_CONGRATS_EMI:${congrats.marriageNumber}`,
+                  addedById: finalAddedById,
+                }
+              });
+
+              // Record cash flow entry
+              await recordLegacyPaymentEntry(tx, {
+                legacyId: congrats.id,
+                date: new Date(),
+                amount: expectedEmiAmount,
+                name: formatEmiContributionName(
+                  [payerApp.formNumber, payerApp.applicantName, payerApp.address],
+                  { name: congrats.applicantName, code: congrats.marriageNumber, scheme: "marriage congratulations" }
+                ),
+                source: "marriage_congratulations_emi",
+                type: "In",
+              });
+
+              updated++;
+              details.push({ marriageNumber: congrats.marriageNumber, status: "updated" });
             }
 
-            // Create matching GeneralApplicationInstallment row for Payment Management & Cash Flow
-            await prisma.generalApplicationInstallment.create({
-              data: {
-                applicationId: payerApp.id,
-                amount: emiAmount,
-                date: new Date(),
-                paymentMode: paymentModeInput,
-                note: `MARRIAGE_CONGRATS_EMI:${congrats.marriageNumber}`,
-                addedById: finalAddedById,
-              }
-            });
+            return { updated, details };
+          });
 
-            // Record cash flow entry
-            await recordLegacyPaymentEntry(prisma, {
-              legacyId: congrats.id,
-              date: new Date(),
-              amount: emiAmount,
-              name: formatEmiContributionName(
-                [payerApp.formNumber, payerApp.applicantName, payerApp.address],
-                { name: congrats.applicantName, code: congrats.marriageNumber, scheme: "marriage congratulations" }
-              ),
-              source: "marriage_congratulations_emi",
-              type: "In",
-            });
+          bulkDataCache.clear();
 
-            updated++;
-            details.push({ marriageNumber: congrats.marriageNumber, status: "updated" });
-          } catch (err) {
-            details.push({ marriageNumber: "", status: "failed" });
-          }
+          return res.json({
+            status: true,
+            error: false,
+            marriages_updated: result.updated,
+            marriages_failed: items.length - result.updated,
+            details: result.details
+          });
+        } catch (txErr: any) {
+          return res.status(200).json({
+            status: false,
+            error: true,
+            message: txErr.message || "Failed to update Marriage EMI status"
+          });
         }
-
-        bulkDataCache.clear();
-
-        return res.json({
-          status: true,
-          error: false,
-          marriages_updated: updated,
-          marriages_failed: items.length - updated,
-          details
-        });
       }
 
       case "register": {
@@ -4947,7 +5019,8 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
               where: { OR: orConditions }
             });
             
-            const emiAmount = payerApp ? (MARRIAGE_CATEGORY_EMI_AMOUNTS[payerApp.category] ?? 300) : 300;
+            const payerGroup = payerApp ? resolveGeneralMarriageGroup(payerApp.installmentAmount) : null;
+            const emiAmount = payerGroup ? getExpectedInstallmentAmount(payerGroup) : (congrats.installmentAmount ? (resolveGeneralMarriageGroup(congrats.installmentAmount) ? getExpectedInstallmentAmount(resolveGeneralMarriageGroup(congrats.installmentAmount)!) : 300) : 300);
             const category = payerApp ? payerApp.category : "A";
             const appId = payerApp ? payerApp.id : congrats.id;
 

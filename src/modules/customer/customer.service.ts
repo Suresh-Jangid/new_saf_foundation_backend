@@ -1,3 +1,4 @@
+import { resolveGeneralMarriageGroup, resolveMayraGroup, validateContributionGroupMatch, getExpectedInstallmentAmount } from "../../utils/contribution-group";
 import { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/db";
@@ -29,8 +30,7 @@ const OTP_VERIFIED_WINDOW_MS = 15 * 60 * 1000;
 // source of truth in compatibility.routes.ts (admin bulk EMI collection
 // screens) — duplicated here (not imported) because that file exports
 // routes, not shared constants. Keep in sync if those ever change.
-const MARRIAGE_CATEGORY_EMI_AMOUNTS: Record<string, number> = { A: 100, B: 200, C: 300 };
-const MAYRA_CATEGORY_EMI_AMOUNTS: Record<string, number> = { B: 200, C: 300 };
+// Legacy category amounts replaced by authoritative strict group separation (GM-300, GM-1000, MAYRA-300, MAYRA-1000)
 const SURAKSHA_BIMA_EMI_AMOUNT = 200;
 
 function normalizeMobile(mobile: unknown): string {
@@ -314,17 +314,21 @@ export class CustomerService {
     // dues, not tied to any specific marriage entity (pick one via the admin
     // bulk screen, or pass its id straight into createPaymentOrder).
     const marriages = generalApps
-      .filter((app) => app.isActive)
-      .map((app) => ({
-        applicantName: app.applicantName,
-        fatherName: app.fatherName,
-        application_id: app.id,
-        formNumber: app.formNumber,
-        category: app.category,
-        gender: app.gender,
-        emiAmount: MARRIAGE_CATEGORY_EMI_AMOUNTS[app.category] ?? 0,
-        module_type: "marriage",
-      }));
+      .filter((app) => app.isActive && resolveGeneralMarriageGroup(app.installmentAmount) !== null)
+      .map((app) => {
+        const group = resolveGeneralMarriageGroup(app.installmentAmount)!;
+        return {
+          applicantName: app.applicantName,
+          fatherName: app.fatherName,
+          application_id: app.id,
+          formNumber: app.formNumber,
+          category: app.category,
+          gender: app.gender,
+          group,
+          emiAmount: getExpectedInstallmentAmount(group),
+          module_type: "marriage",
+        };
+      });
 
     const insurances = insuranceApps.map((app) => ({
       id: app.id,
@@ -367,27 +371,29 @@ export class CustomerService {
         mobile: reg.mobile,
         pendingAmount: pending,
         mayraInstallment: Number(reg.mayraInstallment),
+        slabCode: reg.slabCode,
         module_type: "mayra",
         source_table: "mayra_registrations",
       };
     });
 
-    // Like marriages above: the mayra-congratulations pool is funded by
-    // active general-application members at their category's rate (see
-    // getMayraPendingPayers in compatibility.routes.ts — `payer` there is a
-    // GeneralApplication, not a MayraRegistration), not by mayra registrants.
-    const mayraCongratulations = generalApps
-      .filter((app) => app.isActive)
-      .map((app) => ({
-        applicantName: app.applicantName,
-        fatherName: app.fatherName,
-        application_id: app.id,
-        formNumber: app.formNumber,
-        category: app.category,
-        gender: app.gender,
-        emiAmount: MAYRA_CATEGORY_EMI_AMOUNTS[app.category] ?? 0,
-        module_type: "mayra_congratulations",
-      }));
+    // Mayra congratulations pool is strictly funded by active Mayra registrants (MAYRA-300 or MAYRA-1000)
+    const mayraCongratulations = mayras
+      .filter((m) => resolveMayraGroup(m.mayraInstallment) !== null)
+      .map((m) => {
+        const group = resolveMayraGroup(m.mayraInstallment)!;
+        return {
+          applicantName: m.applicantName,
+          fatherName: m.fatherName,
+          application_id: m.id,
+          formNumber: m.formNumber,
+          category: m.slabCode || "C",
+          gender: m.gender,
+          group,
+          emiAmount: getExpectedInstallmentAmount(group),
+          module_type: "mayra_congratulations",
+        };
+      });
 
     return {
       success: true,
@@ -521,19 +527,39 @@ export class CustomerService {
       const congrats = await prisma.marriageCongratulations.findFirst({ where: { id: entityId, deletedAt: null } });
       if (!congrats) throw new NotFoundError("Marriage congratulations record not found");
       const payer = await this.requireActiveGeneralApplication(mobile);
+      const payerGroup = resolveGeneralMarriageGroup(payer.installmentAmount);
+      const congratsGroup = resolveGeneralMarriageGroup(congrats.installmentAmount);
+      validateContributionGroupMatch({
+        sourceModule: "general_marriage",
+        recipientModule: "general_marriage",
+        sourceGroup: payerGroup,
+        recipientGroup: congratsGroup,
+        sourceLabel: `Payer application (${payer.formNumber})`,
+        recipientLabel: `Recipient marriage (${congrats.marriageNumber})`,
+      });
       return {
-        amount: MARRIAGE_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0,
+        amount: getExpectedInstallmentAmount(payerGroup!),
         referenceNumber: congrats.marriageNumber,
         contactMobile: mobile,
       };
     }
 
     if (moduleType === "mayra_congratulations") {
-      const congrats = await prisma.mayraCongratulations.findFirst({ where: { id: entityId, deletedAt: null } });
+      const congrats = await prisma.mayraCongratulations.findFirst({ where: { id: entityId, deletedAt: null }, include: { mayraRegistration: true } });
       if (!congrats) throw new NotFoundError("Mayra congratulations record not found");
-      const payer = await this.requireActiveGeneralApplication(mobile);
+      const payer = await this.requireActiveMayraRegistration(mobile);
+      const payerGroup = resolveMayraGroup(payer.mayraInstallment);
+      const congratsGroup = resolveMayraGroup(congrats.mayraRegistration?.mayraInstallment ?? congrats.installmentAmount);
+      validateContributionGroupMatch({
+        sourceModule: "mayra",
+        recipientModule: "mayra",
+        sourceGroup: payerGroup,
+        recipientGroup: congratsGroup,
+        sourceLabel: `Payer Mayra record (${payer.formNumber})`,
+        recipientLabel: `Recipient Mayra (${congrats.mayraNumber})`,
+      });
       return {
-        amount: MAYRA_CATEGORY_EMI_AMOUNTS[payer.category] ?? 0,
+        amount: getExpectedInstallmentAmount(payerGroup!),
         referenceNumber: congrats.mayraNumber,
         contactMobile: mobile,
       };
@@ -592,7 +618,7 @@ export class CustomerService {
     }
 
     if (txn.moduleType === "mayra_congratulations") {
-      const payer = await this.requireActiveGeneralApplication(txn.mobile);
+      const payer = await this.requireActiveMayraRegistration(txn.mobile);
       await mayraService.addMayraCongratulationsPayment(
         txn.entityId,
         { amount, applicationId: payer.id, category: "EMI" },
@@ -621,6 +647,15 @@ export class CustomerService {
     });
     if (!app) throw new BadRequestError("No active application eligible to make this EMI contribution");
     return app;
+  }
+
+  private async requireActiveMayraRegistration(mobile: string) {
+    const reg = await prisma.mayraRegistration.findFirst({
+      where: { mobile, isActive: true, deletedAt: null },
+      orderBy: { applicationDate: "desc" },
+    });
+    if (!reg) throw new BadRequestError("No active Mayra registration eligible to make this EMI contribution");
+    return reg;
   }
 
   private async requireActiveInsuranceApplication(mobile: string) {

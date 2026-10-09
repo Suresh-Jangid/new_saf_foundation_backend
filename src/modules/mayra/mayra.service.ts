@@ -1,3 +1,4 @@
+import { resolveMayraGroup, validateContributionGroupMatch, getExpectedInstallmentAmount } from "../../utils/contribution-group";
 import { prisma, PRISMA_TX_OPTIONS, PrismaTransactionClient } from "../../config/db";
 import { NotFoundError, BadRequestError } from "../../utils/errors";
 import { isValidUuid, resolveAgentSeniorHierarchyBatch } from "../../utils/compat-helpers";
@@ -754,12 +755,20 @@ export class MayraService {
       throw new BadRequestError("Code number is required");
     }
 
+    const regGroup = resolveMayraGroup(reg.mayraInstallment);
+    if (!regGroup) {
+      throw new BadRequestError(
+        `Applicant Mayra registration (${reg.formNumber}) must have an authoritative installment of ₹300 or ₹1000 (found: ${reg.mayraInstallment || 'none'}). Cannot create Mayra Congratulations.`
+      );
+    }
+    const authoritativeInstallment = getExpectedInstallmentAmount(regGroup);
+
     const toDecimal = (val: unknown, fallback = 0) => {
       const n = Number(val);
       return Number.isFinite(n) ? n : fallback;
     };
 
-    return prisma.mayraCongratulations.create({
+    const createdRecord = await prisma.mayraCongratulations.create({
       data: {
         mayraRegistrationId,
         date: parseRequiredDate(data.date, "date"),
@@ -773,7 +782,7 @@ export class MayraService {
         membershipJoinDate: parseRequiredDate(data.membershipJoinDate, "membershipJoinDate"),
         associatedUntil: data.associatedUntil,
         permanentFee: toDecimal(data.permanentFee),
-        installmentAmount: toDecimal(data.installmentAmount),
+        installmentAmount: authoritativeInstallment,
         totalGrantAmount: toDecimal(data.totalGrantAmount),
         totalMembersServing: Math.trunc(toDecimal(data.totalMembersServing)),
         rate200: toDecimal(data.rate200),
@@ -785,6 +794,14 @@ export class MayraService {
         addedById: addedById,
       },
     });
+
+    // Deactivate beneficiary registration once Mayra congratulations record is created
+    await prisma.mayraRegistration.update({
+      where: { id: reg.id },
+      data: { isActive: false },
+    });
+
+    return createdRecord;
   }
 
   /**
@@ -792,66 +809,144 @@ export class MayraService {
    */
   public async addMayraCongratulationsPayment(mayraCongratulationsId: string, data: any, addedById: string) {
     if (!isValidUuid(mayraCongratulationsId)) {
-      throw new BadRequestError("Mayra Congratulations record not found");
+      throw new BadRequestError("Valid Mayra Congratulations ID is required");
     }
 
-    const congrats = await prisma.mayraCongratulations.findUnique({
-      where: { id: mayraCongratulationsId },
-    });
+    return prisma.$transaction(async (tx) => {
+      const congrats = await tx.mayraCongratulations.findUnique({
+        where: { id: mayraCongratulationsId },
+        include: { mayraRegistration: true },
+      });
 
-    if (!congrats) {
-      throw new NotFoundError("Mayra Congratulations record not found");
-    }
+      if (!congrats) {
+        throw new NotFoundError("Mayra Congratulations record not found");
+      }
 
-    const payerApplicationId = data.applicationId || null;
-    const payer = payerApplicationId && isValidUuid(String(payerApplicationId))
-      ? await prisma.generalApplication.findFirst({
-          where: { id: String(payerApplicationId), deletedAt: null },
-          select: { formNumber: true, applicantName: true, address: true },
-        })
-      : null;
+      const recipientGroup = resolveMayraGroup(congrats.mayraRegistration?.mayraInstallment ?? congrats.installmentAmount);
+      if (!recipientGroup) {
+        throw new BadRequestError(
+          `Recipient Mayra record (${congrats.mayraNumber}) has an ambiguous or unassigned installment group (${congrats.installmentAmount || 'none'}). Contributions are blocked pending administrative review.`
+        );
+      }
 
-    const payment = await prisma.mayraCongratulationsPayment.create({
-      data: {
-        mayraCongratulationsId,
-        amount: data.amount,
-        category: data.category,
-        applicationId: payerApplicationId,
-        addedById: addedById,
-      },
-    });
+      const payerId = data.applicationId || data.mayra_id || data.application_id || null;
+      if (!payerId || !isValidUuid(String(payerId))) {
+        throw new BadRequestError("Valid payer Mayra registration ID is required");
+      }
 
-    await recordLegacyPaymentEntry(prisma, {
-      legacyId: payment.id,
-      date: payment.createdAt,
-      amount: data.amount,
-      name: formatEmiContributionName(
-        payer ? [payer.formNumber, payer.applicantName, payer.address] : [congrats.codeNumber, congrats.applicantName, congrats.address],
-        payer ? { name: congrats.applicantName, code: congrats.codeNumber, scheme: "Mayra congratulations" } : null
-      ),
-      source: "mayra_congratulations_emi",
-      type: "In",
-    });
+      // Check cross-module: ensure payer is NOT a General Application
+      const generalCheck = await tx.generalApplication.findFirst({
+        where: { id: String(payerId), deletedAt: null },
+        select: { id: true, formNumber: true },
+      });
+      if (generalCheck) {
+        throw new BadRequestError(
+          `Cross-module contribution rejected: General Marriage record (${generalCheck.formNumber}) cannot contribute to Mayra. General Marriage and Mayra pools are strictly separated.`
+        );
+      }
 
-    return payment;
+      const payer = await tx.mayraRegistration.findFirst({
+        where: { id: String(payerId), deletedAt: null },
+        select: { id: true, formNumber: true, applicantName: true, address: true, mayraInstallment: true, isActive: true, gender: true, slabCode: true },
+      });
+      if (!payer) {
+        throw new NotFoundError("Payer Mayra registration record not found");
+      }
+      if (!payer.isActive) {
+        throw new BadRequestError(`Mayra member ${payer.formNumber} is inactive and cannot make contributions`);
+      }
+      if (payer.gender !== congrats.gender) {
+        throw new BadRequestError("Gender mismatch: Mayra contributions must match the Mayra pool gender");
+      }
+
+      const payerGroup = resolveMayraGroup(payer.mayraInstallment);
+      const { expectedAmount } = validateContributionGroupMatch({
+        sourceModule: "mayra",
+        recipientModule: "mayra",
+        sourceGroup: payerGroup,
+        recipientGroup: recipientGroup,
+        sourceLabel: `Payer Mayra record (${payer.formNumber})`,
+        recipientLabel: `Recipient Mayra (${congrats.mayraNumber})`,
+      });
+
+      const paymentAmount = data.amount !== undefined ? Number(data.amount) : expectedAmount;
+
+      // Duplicate check inside transaction
+      const existingPayment = await tx.mayraCongratulationsPayment.findFirst({
+        where: {
+          mayraCongratulationsId: congrats.id,
+          applicationId: payer.id,
+          deletedAt: null,
+        },
+      });
+      if (existingPayment) {
+        throw new BadRequestError(
+          `Payment already recorded for member ${payer.formNumber} towards Mayra ${congrats.mayraNumber}`
+        );
+      }
+
+      const payment = await tx.mayraCongratulationsPayment.create({
+        data: {
+          mayraCongratulationsId: congrats.id,
+          amount: paymentAmount,
+          category: payer.slabCode || data.category || "EMI",
+          applicationId: payer.id,
+          addedById: addedById,
+        },
+      });
+
+      await recordLegacyPaymentEntry(tx, {
+        legacyId: payment.id,
+        date: payment.createdAt,
+        amount: paymentAmount,
+        name: formatEmiContributionName(
+          [payer.formNumber, payer.applicantName, payer.address],
+          { name: congrats.applicantName, code: congrats.mayraNumber, scheme: "Mayra congratulations" }
+        ),
+        source: "mayra_congratulations_emi",
+        type: "In",
+      });
+
+      return payment;
+    }, PRISMA_TX_OPTIONS);
   }
 
   public async getMayraCongratulationsMembers(mayraRegistrationId: string) {
-    const congrats = await prisma.mayraCongratulations.findUnique({
-      where: { mayraRegistrationId },
+    const congrats = await prisma.mayraCongratulations.findFirst({
+      where: {
+        OR: [
+          ...(isValidUuid(mayraRegistrationId) ? [{ id: mayraRegistrationId }, { mayraRegistrationId }] : [{ mayraRegistrationId }])
+        ],
+        deletedAt: null
+      },
+      include: { mayraRegistration: true },
     });
     if (!congrats) {
       throw new NotFoundError("Mayra Congratulations record not found");
     }
 
-    // Fetch all active members (General Applications)
-    const members = await prisma.generalApplication.findMany({
-      where: { deletedAt: null, isActive: true },
+    const recipientGroup = resolveMayraGroup(congrats.mayraRegistration?.mayraInstallment ?? congrats.installmentAmount);
+    if (!recipientGroup) {
+      throw new BadRequestError(
+        `Recipient Mayra record (${congrats.mayraNumber}) has an ambiguous or unassigned installment group (${congrats.installmentAmount || 'none'}). Cannot retrieve eligible members pending administrative review.`
+      );
+    }
+    const expectedInstallment = getExpectedInstallmentAmount(recipientGroup);
+
+    // Fetch active Mayra Registration members of matching gender and same installment group
+    const members = await prisma.mayraRegistration.findMany({
+      where: {
+        deletedAt: null,
+        isActive: true,
+        gender: congrats.gender,
+        mayraInstallment: expectedInstallment,
+      },
       select: {
         id: true,
         applicantName: true,
         formNumber: true,
-        category: true,
+        mayraInstallment: true,
+        slabCode: true,
       },
     });
 
@@ -863,7 +958,7 @@ export class MayraService {
 
     const paidMemberIds = new Set(payments.map(p => p.applicationId).filter(Boolean));
 
-    // Group by category
+    // Group by category (slabCode letter: A, B, C or other)
     const categories: Record<string, { members: any[] }> = {
       A: { members: [] },
       B: { members: [] },
@@ -871,7 +966,8 @@ export class MayraService {
     };
 
     members.forEach((m) => {
-      const cat = m.category.toString();
+      const code = (m.slabCode ?? "C").toString().toUpperCase();
+      const cat = code.split("_").pop() || "C";
       if (!categories[cat]) {
         categories[cat] = { members: [] };
       }
@@ -879,12 +975,25 @@ export class MayraService {
         id: m.id,
         applicantName: m.applicantName,
         formNumber: m.formNumber,
-        category: m.category,
+        category: cat,
+        mayraInstallment: Number(m.mayraInstallment),
         payment_status: paidMemberIds.has(m.id) ? 1 : 0,
       });
     });
 
-    return { status: true, categories };
+    return {
+      status: true,
+      group: recipientGroup,
+      installmentAmount: expectedInstallment,
+      categories,
+      members: members.map(m => ({
+        id: m.id,
+        applicantName: m.applicantName,
+        formNumber: m.formNumber,
+        mayraInstallment: Number(m.mayraInstallment),
+        payment_status: paidMemberIds.has(m.id) ? 1 : 0,
+      }))
+    };
   }
 
   public async getMayraCongratulationsPayments(mayraRegistrationId: string) {
