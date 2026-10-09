@@ -24,6 +24,19 @@ router.get(
   validateRequest(epinInventoryQuerySchema),
   controller.getInventory.bind(controller)
 );
+// 1b. GET /api/v1/epins/eligible - Active assigned E-PINs for agent selection in registration forms
+router.get(
+  "/eligible",
+  authenticate as any,
+  controller.getEligibleEpins.bind(controller)
+);
+
+router.get(
+  "/agent/:agentId/eligible",
+  authenticate as any,
+  controller.getEligibleEpins.bind(controller)
+);
+
 
 // 2. POST /api/v1/epins/generate - Batch generation (Admin only)
 router.post(

@@ -22,6 +22,23 @@ export class EpinsController {
   }
 
   /**
+   * 1b. GET /api/v1/epins/eligible - Active assigned E-PINs for an agent
+   */
+  public async getEligibleEpins(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError("Authentication required");
+      }
+      const agentId = (req.query.agentId || req.query.assignedAgentId || req.params.agentId) as string;
+      const schemeCode = (req.query.schemeCode || req.query.schemeTypeId) as string | undefined;
+      const result = await epinsService.getEligibleEpinsForAgent(agentId, req.user, schemeCode);
+      return res.status(200).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
    * 2. POST /api/v1/epins/generate - Batch generation (Admin only)
    */
   public async generateEPins(req: AuthenticatedRequest, res: Response, next: NextFunction) {

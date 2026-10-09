@@ -1,5 +1,6 @@
 import { prisma, PRISMA_TX_OPTIONS, PrismaTransactionClient } from "../../config/db";
 import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from "../../utils/errors";
+import { isValidUuid } from "../../utils/compat-helpers";
 import {
   EPinLifecycleStatus,
   EPinInventoryFilter,
@@ -178,6 +179,117 @@ export class EpinsService {
         limit,
         totalPages: Math.ceil(totalMatching / limit) || 1,
       },
+    };
+  }
+
+  /**
+   * 2. BATCH GENERATION: Generate batch of cryptographically secure E-PINs (Admin Only)
+   */
+
+  /**
+   * 1b. ELIGIBLE E-PINS: Query active ASSIGNED E-PINs for an agent to use in registration forms
+   */
+  public async getEligibleEpinsForAgent(
+    agentId: string,
+    actor: { userId: string; role: "ADMIN" | "AGENT" },
+    schemeCode?: string
+  ) {
+    const trimmedAgentId = String(agentId || "").trim();
+    if (!trimmedAgentId) {
+      throw new BadRequestError("agentId is required to fetch eligible E-PINs");
+    }
+
+    if (!isValidUuid(trimmedAgentId)) {
+      throw new BadRequestError("Valid agentId UUID is required");
+    }
+
+    // Agent RBAC boundary: Agents can ONLY see E-PINs assigned to their own account
+    if (actor.role === "AGENT" && trimmedAgentId !== actor.userId) {
+      throw new ForbiddenError("You do not have permission to view E-PINs assigned to another agent");
+    }
+
+    // Verify agent exists
+    const targetAgent = await prisma.user.findFirst({
+      where: { id: trimmedAgentId, deletedAt: null },
+      select: { id: true, name: true, mobile: true, role: true },
+    });
+
+    if (!targetAgent) {
+      throw new NotFoundError("Selected agent not found");
+    }
+
+    const where: Prisma.EPinWhereInput = {
+      assignedToId: trimmedAgentId,
+      status: "ASSIGNED",
+      usedEntityId: null,
+      usedAt: null,
+    };
+
+    if (schemeCode && schemeCode.trim()) {
+      where.schemeCode = { equals: schemeCode.trim().toUpperCase() };
+    }
+
+    const pins = await prisma.ePin.findMany({
+      where,
+      orderBy: [{ assignedAt: "desc" }, { createdAt: "desc" }],
+      take: 200,
+    });
+
+    // Check if any of these are already consumed by live registrations
+    const pinCodes = pins.map((p) => p.pinCode);
+    const activeLinkedCodes = new Set<string>();
+
+    if (pinCodes.length > 0) {
+      const [janni, aawas, lado, dhundh, shubh] = await Promise.all([
+        prisma.janniDeliveryRegistration.findMany({
+          where: { epinCode: { in: pinCodes }, deletedAt: null },
+          select: { epinCode: true },
+        }),
+        prisma.aawasRegistration.findMany({
+          where: { epinCode: { in: pinCodes }, deletedAt: null },
+          select: { epinCode: true },
+        }),
+        prisma.ladoBahinRegistration.findMany({
+          where: { epinCode: { in: pinCodes }, deletedAt: null },
+          select: { epinCode: true },
+        }),
+        prisma.dhundhotsavRegistration.findMany({
+          where: { epinCode: { in: pinCodes }, deletedAt: null },
+          select: { epinCode: true },
+        }),
+        prisma.shubhLaxmiRegistration.findMany({
+          where: { epinCode: { in: pinCodes }, deletedAt: null },
+          select: { epinCode: true },
+        }),
+      ]);
+
+      for (const row of [...janni, ...aawas, ...lado, ...dhundh, ...shubh]) {
+        if (row.epinCode) activeLinkedCodes.add(row.epinCode);
+      }
+    }
+
+    const eligiblePins = pins.filter((p) => !activeLinkedCodes.has(p.pinCode));
+
+    return {
+      success: true,
+      agent: {
+        id: targetAgent.id,
+        name: targetAgent.name,
+        mobile: targetAgent.mobile,
+      },
+      count: eligiblePins.length,
+      data: eligiblePins.map((pin) => ({
+        id: pin.id,
+        pinNumber: pin.pinCode,
+        pinCode: pin.pinCode,
+        amount: Number(pin.amount),
+        schemeAmount: Number(pin.amount),
+        schemeCode: pin.schemeCode,
+        slabCode: pin.slabCode,
+        status: pin.status,
+        assignedAt: pin.assignedAt,
+        createdAt: pin.createdAt,
+      })),
     };
   }
 
