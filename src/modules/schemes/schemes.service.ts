@@ -676,7 +676,7 @@ export class SchemesService {
     const aadharNumber = String(data.aadharNumber || "").replace(/\D/g, "");
 
     const record = await prisma.$transaction(async (tx) => {
-      await assertAadharAvailable(tx, aadharNumber);
+      await assertAadharAvailable(tx, aadharNumber, undefined, "disabilityCycle");
 
       let formNumber = typeof data.formNumber === "string" ? data.formNumber.trim() : "";
       if (!formNumber) {
@@ -723,7 +723,7 @@ export class SchemesService {
     if (data.aadharNumber !== undefined) {
       const newAadharCheck = String(data.aadharNumber).replace(/\D/g, "");
       if (newAadharCheck !== existing.aadharNumber) {
-        await assertAadharAvailable(prisma, newAadharCheck, { model: "disabilityCycle", id });
+        await assertAadharAvailable(prisma, newAadharCheck, { model: "disabilityCycle", id }, "disabilityCycle");
       }
     }
 
@@ -1393,7 +1393,7 @@ export class SchemesService {
     if (data.aadharNumber !== undefined) {
       const newAadharCheck = String(data.aadharNumber).replace(/\D/g, "");
       if (newAadharCheck !== existing.aadharNumber) {
-        await assertAadharAvailable(prisma, newAadharCheck, { model: "sewingMachineCamp", id });
+        await assertAadharAvailable(prisma, newAadharCheck, { model: "sewingMachineCamp", id }, "sewingMachineCamp");
       }
     }
 

@@ -375,7 +375,7 @@ export class ApplicationsService {
     }
 
     const application = await prisma.$transaction(async (tx) => {
-      await assertAadharAvailable(tx, createData.aadharNumber);
+      await assertAadharAvailable(tx, createData.aadharNumber, undefined, "generalApplication");
       
       // Duplicate detection for offlineFormNumber if provided
       if (offlineFormNumber) {
@@ -639,7 +639,7 @@ export class ApplicationsService {
     if (data.aadharNumber !== undefined) {
       const newAadhar = String(data.aadharNumber).replace(/\D/g, "");
       if (newAadhar !== app.aadharNumber) {
-        await assertAadharAvailable(prisma, newAadhar, { model: "generalApplication", id });
+        await assertAadharAvailable(prisma, newAadhar, { model: "generalApplication", id }, "generalApplication");
       }
     }
 
@@ -787,7 +787,7 @@ export class ApplicationsService {
     if (data.aadharNumber !== undefined) {
       const newAadhar = String(data.aadharNumber).replace(/\D/g, "");
       if (newAadhar !== app.aadharNumber) {
-        await assertAadharAvailable(prisma, newAadhar, { model: "insuranceApplication", id });
+        await assertAadharAvailable(prisma, newAadhar, { model: "insuranceApplication", id }, "insuranceApplication");
       }
     }
 
@@ -1039,7 +1039,7 @@ export class ApplicationsService {
 
     const application = await prisma.$transaction(async (tx) => {
       await lockFormNumberSequence(tx, "insurance_application_form_number");
-      await assertAadharAvailable(tx, aadharNumber);
+      await assertAadharAvailable(tx, aadharNumber, undefined, "insuranceApplication");
 
       // Duplicate detection for offlineFormNumber if provided
       if (offlineFormNumber) {

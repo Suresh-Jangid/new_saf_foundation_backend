@@ -17,7 +17,7 @@ import { prisma } from "../../config/db";
 import { saveImagePayload } from "../../utils/file-upload";
 // drawDevanagariText imported via dynamic require where needed
 import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from "../../utils/errors";
-import { findAadharOwner, AadharSourceModel } from "../../utils/aadhar-uniqueness";
+import { findAadharOwner, AadharSourceModel, AADHAR_SCHEME_LABELS } from "../../utils/aadhar-uniqueness";
 import {
   applyPartialUpdate,
   buildUpdateData,
@@ -1117,6 +1117,13 @@ router.all("/", upload.any(), async (req: Request, res: Response) => {
           return res.json({ status: true, error: false, available: false, message: "Aadhaar must be exactly 12 digits" });
         }
         const sourceModel = payload.sourceModel as AadharSourceModel | undefined;
+        if (!sourceModel || !AADHAR_SCHEME_LABELS[sourceModel]) {
+          return res.status(400).json({
+            status: false,
+            error: true,
+            message: "sourceModel is required for scheme-scoped Aadhaar check",
+          });
+        }
         const excludeModel = payload.excludeModel as AadharSourceModel | undefined;
         const excludeId = payload.excludeId ? String(payload.excludeId) : undefined;
         const owner = await findAadharOwner(
