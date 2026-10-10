@@ -23,6 +23,27 @@ export function saveImagePayload(val?: string | null): string | null {
     return trimmed;
   }
 
+  // Helper to optimize image with sharp in background
+  const optimizeOnDisk = (buf: Buffer, targetPath: string) => {
+    try {
+      const sharp = require("sharp");
+      const tempOptPath = targetPath + ".opt.jpg";
+      sharp(buf)
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toFile(tempOptPath)
+        .then(() => {
+          try {
+            if (fs.existsSync(tempOptPath)) {
+              fs.renameSync(tempOptPath, targetPath);
+            }
+          } catch {}
+        })
+        .catch(() => {});
+    } catch {}
+  };
+
   // Handle base64 Data URL (data:image/jpeg;base64,....)
   if (trimmed.startsWith("data:image/")) {
     try {
@@ -35,6 +56,11 @@ export function saveImagePayload(val?: string | null): string | null {
         const filename = `photo-${Date.now()}-${Math.floor(Math.random() * 1e9)}.${ext}`;
         const filePath = path.join(uploadsDir, filename);
         fs.writeFileSync(filePath, buffer);
+
+        // Automatically optimize image in background
+        if (ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") {
+          optimizeOnDisk(buffer, filePath);
+        }
 
         return `/uploads/${filename}`;
       }
@@ -51,6 +77,9 @@ export function saveImagePayload(val?: string | null): string | null {
       const filename = `photo-${Date.now()}-${Math.floor(Math.random() * 1e9)}.jpg`;
       const filePath = path.join(uploadsDir, filename);
       fs.writeFileSync(filePath, buffer);
+
+      // Automatically optimize image in background
+      optimizeOnDisk(buffer, filePath);
 
       return `/uploads/${filename}`;
     } catch (err) {

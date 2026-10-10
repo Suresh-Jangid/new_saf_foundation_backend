@@ -185,7 +185,11 @@ export class DocumentsService {
           app.passportPhotoUrl.startsWith("https://")
         ) {
           const axios = require("axios");
-          const imgRes = await axios.get(app.passportPhotoUrl, {
+          let photoUrl = app.passportPhotoUrl;
+          if (photoUrl.includes("ik.imagekit.io") && !photoUrl.includes("tr=")) {
+            photoUrl += (photoUrl.includes("?") ? "&" : "?") + "tr=f-jpg,orig-true,q-90";
+          }
+          const imgRes = await axios.get(photoUrl, {
             responseType: "arraybuffer",
             timeout: 5000,
           });
@@ -205,10 +209,21 @@ export class DocumentsService {
 
         if (imageBytes && imageBytes.length > 0) {
           let image: any;
-          if (isPng) {
+          const isJpeg = imageBytes.length >= 3 && imageBytes[0] === 0xff && imageBytes[1] === 0xd8 && imageBytes[2] === 0xff;
+          const isPngDetected = isPng || (imageBytes.length >= 4 && imageBytes[0] === 0x89 && imageBytes[1] === 0x50 && imageBytes[2] === 0x4e && imageBytes[3] === 0x47);
+
+          if (isPngDetected) {
             image = await pdfDoc.embedPng(imageBytes);
-          } else {
+          } else if (isJpeg) {
             image = await pdfDoc.embedJpg(imageBytes);
+          } else {
+            try {
+              const sharp = require("sharp");
+              const convertedJpg = await sharp(Buffer.from(imageBytes)).jpeg({ quality: 90 }).toBuffer();
+              image = await pdfDoc.embedJpg(convertedJpg);
+            } catch {
+              image = await pdfDoc.embedJpg(imageBytes);
+            }
           }
 
           if (image) {
