@@ -500,6 +500,14 @@ export class ApplicationsService {
       whereClause.addedById = f.addedById;
     }
 
+    if (f.installmentAmount !== undefined && !isNaN(f.installmentAmount)) {
+      whereClause.installmentAmount = f.installmentAmount;
+    } else if (f.group === "GM-300") {
+      whereClause.installmentAmount = 300;
+    } else if (f.group === "GM-1000") {
+      whereClause.installmentAmount = 1000;
+    }
+
     applyAddressContains(whereClause, f.address);
     applyDateRangeToField(whereClause, "applicationDate", f.fromDate, f.toDate);
 

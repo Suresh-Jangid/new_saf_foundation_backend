@@ -301,6 +301,15 @@ export class MayraService {
       whereClause.addedById = f.addedById;
     }
 
+    const mInst = f.mayraInstallment !== undefined && !isNaN(f.mayraInstallment) ? f.mayraInstallment : (f.installmentAmount !== undefined && !isNaN(f.installmentAmount) ? f.installmentAmount : undefined);
+    if (mInst !== undefined) {
+      whereClause.mayraInstallment = mInst;
+    } else if (f.group === "MAYRA-300") {
+      whereClause.mayraInstallment = 300;
+    } else if (f.group === "MAYRA-1000") {
+      whereClause.mayraInstallment = 1000;
+    }
+
     applyAddressContains(whereClause, f.address);
     applyDateRangeToField(whereClause, "applicationDate", f.fromDate, f.toDate);
 

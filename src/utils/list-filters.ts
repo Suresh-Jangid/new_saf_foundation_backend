@@ -13,6 +13,9 @@ export type NormalizedListFilters = {
   toDate?: string;
   page?: number;
   limit?: number;
+  installmentAmount?: number;
+  mayraInstallment?: number;
+  group?: string;
   /** Opt-in sort override. Only "lastAdded" is recognized today; anything
    *  else falls back to each endpoint's default createdAt-desc ordering. */
   sortBy?: string;
@@ -81,6 +84,23 @@ export function normalizeListFilters(raw: Record<string, unknown> = {}): Normali
 
   if (raw.sortBy && String(raw.sortBy).trim()) {
     out.sortBy = String(raw.sortBy).trim();
+  }
+
+  const inst = raw.installmentAmount ?? raw.installment_amount ?? raw.installment;
+  if (inst !== undefined && inst !== null && String(inst).trim() && String(inst) !== "all") {
+    const num = Number(inst);
+    if (!isNaN(num)) out.installmentAmount = num;
+  }
+
+  const mayraInst = raw.mayraInstallment ?? raw.mayra_installment;
+  if (mayraInst !== undefined && mayraInst !== null && String(mayraInst).trim() && String(mayraInst) !== "all") {
+    const num = Number(mayraInst);
+    if (!isNaN(num)) out.mayraInstallment = num;
+  }
+
+  const group = raw.group;
+  if (group && String(group).trim() && String(group) !== "all") {
+    out.group = String(group).trim();
   }
 
   return out;
